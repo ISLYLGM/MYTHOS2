@@ -30,10 +30,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -41,18 +43,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import com.example.mytos.R
+import com.example.mytos.data.AuthRepository
 import com.example.mytos.ui.theme.MytosCream
 import com.example.mytos.ui.theme.MytosPurple
 import com.example.mytos.ui.theme.MytosPurpleDark
 import com.example.mytos.ui.theme.MytosText
 import com.example.mytos.ui.theme.MytosTextSecondary
-
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
+    authRepository: AuthRepository,
     onLogin: () -> Unit,
     onCadastro: () -> Unit
 ) {
@@ -60,27 +63,23 @@ fun LoginScreen(
     var senha by remember { mutableStateOf("") }
     var mostrarSenha by remember { mutableStateOf(false) }
     var tentouEntrar by remember { mutableStateOf(false) }
+    var erroLogin by remember { mutableStateOf<String?>(null) }
+    var entrando by remember { mutableStateOf(false) }
 
-    val emailValido = email.matches(
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val emailValido = email.trim().matches(
         Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
     )
-
     val senhaValida = senha.length >= 6
-
     val formularioValido = emailValido && senhaValida
-
-    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MytosCream)
     ) {
-
-        // ==========================================
-        // TOPO ROXO
-        // ==========================================
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -94,16 +93,12 @@ fun LoginScreen(
                 ),
             contentAlignment = Alignment.Center
         ) {
-
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-
                 Image(
-                    painter = painterResource(
-                        id = R.drawable.mytos_logo_white
-                    ),
+                    painter = painterResource(id = R.drawable.mytos_logo_white),
                     contentDescription = "Logo MYTOS",
                     modifier = Modifier.size(95.dp)
                 )
@@ -120,10 +115,6 @@ fun LoginScreen(
             }
         }
 
-        // ==========================================
-        // CONTEÚDO
-        // ==========================================
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -135,7 +126,6 @@ fun LoginScreen(
                 ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
             Text(
                 text = "Que bom ter você aqui!",
                 color = MytosPurpleDark,
@@ -156,29 +146,21 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ==========================================
-            // E-MAIL
-            // ==========================================
-
             OutlinedTextField(
                 value = email,
                 onValueChange = {
                     email = it
                     tentouEntrar = false
+                    erroLogin = null
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
                 singleLine = true,
-                placeholder = {
-                    Text(
-                        text = "E-mail",
-                        fontSize = 17.sp
-                    )
-                },
+                placeholder = { Text("E-mail", fontSize = 17.sp) },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Email,
+                        Icons.Default.Email,
                         contentDescription = "E-mail",
                         tint = MytosPurple
                     )
@@ -195,47 +177,34 @@ fun LoginScreen(
                     fontSize = 12.sp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = 16.dp,
-                            top = 3.dp
-                        )
+                        .padding(start = 16.dp, top = 3.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-
-            // ==========================================
-            // SENHA
-            // ==========================================
 
             OutlinedTextField(
                 value = senha,
                 onValueChange = {
                     senha = it
                     tentouEntrar = false
+                    erroLogin = null
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
                 singleLine = true,
-                placeholder = {
-                    Text(
-                        text = "Senha",
-                        fontSize = 17.sp
-                    )
-                },
+                placeholder = { Text("Senha", fontSize = 17.sp) },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        Icons.Default.Lock,
                         contentDescription = "Senha",
                         tint = MytosPurple
                     )
                 },
                 trailingIcon = {
                     IconButton(
-                        onClick = {
-                            mostrarSenha = !mostrarSenha
-                        }
+                        onClick = { mostrarSenha = !mostrarSenha }
                     ) {
                         Icon(
                             imageVector = if (mostrarSenha) {
@@ -269,27 +238,45 @@ fun LoginScreen(
                     fontSize = 12.sp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = 16.dp,
-                            top = 3.dp
-                        )
+                        .padding(start = 16.dp, top = 3.dp)
+                )
+            }
+
+            if (erroLogin != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = erroLogin.orEmpty(),
+                    color = Color(0xFFD94C59),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // ==========================================
-            // BOTÃO ENTRAR
-            // ==========================================
-
             Button(
                 onClick = {
                     tentouEntrar = true
+                    erroLogin = null
 
-                    if (formularioValido) {
-                        onLogin()
+                    if (formularioValido && !entrando) {
+                        entrando = true
+
+                        scope.launch {
+                            try {
+                                authRepository.entrar(email.trim(), senha)
+                                onLogin()
+                            } catch (e: Exception) {
+                                erroLogin = "E-mail ou senha incorretos."
+                            } finally {
+                                entrando = false
+                            }
+                        }
                     }
                 },
+                enabled = !entrando,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -300,7 +287,7 @@ fun LoginScreen(
                 )
             ) {
                 Text(
-                    text = "ENTRAR",
+                    text = if (entrando) "ENTRANDO..." else "ENTRAR",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp
@@ -309,23 +296,16 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(13.dp))
 
-            // ==========================================
-            // CRIAR CONTA
-            // ==========================================
-
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Text(
                     text = "Primeira visita?",
                     color = MytosTextSecondary,
                     fontSize = 15.sp
                 )
 
-                TextButton(
-                    onClick = onCadastro
-                ) {
+                TextButton(onClick = onCadastro) {
                     Text(
                         text = "Criar conta",
                         color = MytosPurple,
@@ -334,12 +314,6 @@ fun LoginScreen(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(2.dp))
-
-            // ==========================================
-            // INSTAGRAM
-            // ==========================================
 
             TextButton(
                 onClick = {
@@ -350,18 +324,13 @@ fun LoginScreen(
                     context.startActivity(intent)
                 }
             ) {
-
                 Image(
-                    painter = painterResource(
-                        id = R.drawable.ic_instagram
-                    ),
+                    painter = painterResource(id = R.drawable.ic_instagram),
                     contentDescription = "Instagram",
                     modifier = Modifier.size(22.dp)
                 )
 
-                Spacer(
-                    modifier = Modifier.size(7.dp)
-                )
+                Spacer(modifier = Modifier.size(7.dp))
 
                 Text(
                     text = "Confira nosso Instagram",
@@ -375,22 +344,16 @@ fun LoginScreen(
 }
 
 @Composable
-private fun campoLogin() =
-    OutlinedTextFieldDefaults.colors(
-        focusedTextColor = MytosText,
-        unfocusedTextColor = MytosText,
-
-        focusedBorderColor = MytosPurple,
-        unfocusedBorderColor = Color(0xFFDCD5DF),
-
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
-
-        cursorColor = MytosPurple,
-
-        focusedPlaceholderColor = MytosTextSecondary,
-        unfocusedPlaceholderColor = MytosTextSecondary,
-
-        errorBorderColor = Color(0xFFD94C59),
-        errorCursorColor = Color(0xFFD94C59)
-    )
+private fun campoLogin() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MytosText,
+    unfocusedTextColor = MytosText,
+    focusedBorderColor = MytosPurple,
+    unfocusedBorderColor = Color(0xFFDCD5DF),
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    cursorColor = MytosPurple,
+    focusedPlaceholderColor = MytosTextSecondary,
+    unfocusedPlaceholderColor = MytosTextSecondary,
+    errorBorderColor = Color(0xFFD94C59),
+    errorCursorColor = Color(0xFFD94C59)
+)

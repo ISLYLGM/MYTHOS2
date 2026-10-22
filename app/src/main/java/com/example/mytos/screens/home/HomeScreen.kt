@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.mytos.R
 import com.example.mytos.data.SacolaData
-import com.example.mytos.navigation.Rotas
+import com.example.mytos.Rotas
 import com.example.mytos.ui.components.MytosBottomBar
 import com.example.mytos.ui.theme.MytosCream
 import com.example.mytos.ui.theme.MytosLilac

@@ -1,20 +1,12 @@
+
 package com.example.mytos.screens.cardapio
 
+import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -31,28 +23,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,7 +42,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.mytos.data.produtos
+import com.example.mytos.Rotas
+import com.example.mytos.data.MytosDatabase
+import com.example.mytos.data.ProdutoEntity
+import com.example.mytos.data.toProduto
 import com.example.mytos.model.Produto
 import com.example.mytos.ui.components.MytosBottomBar
 import com.example.mytos.ui.theme.MytosCream
@@ -71,119 +56,124 @@ import com.example.mytos.ui.theme.MytosPurpleDark
 import com.example.mytos.ui.theme.MytosText
 import com.example.mytos.ui.theme.MytosTextSecondary
 import com.example.mytos.ui.theme.MytosYellow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.math.RoundingMode
 import java.util.Locale
 
+private const val TAG_CARDAPIO = "CardapioScreen"
+
 @Composable
-fun CardapioScreen(
-    navController: NavController
-) {
+fun CardapioScreen(navController: NavController) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var mostrarDialogo by remember {
-        mutableStateOf(false)
+    val database = remember(context) {
+        MytosDatabase.getDatabase(context.applicationContext)
+    }
+    val produtoDao = remember(database) {
+        database.produtoDao()
     }
 
-    var mostrarDialogoEdicao by remember {
-        mutableStateOf(false)
-    }
+    var produtos by remember { mutableStateOf<List<Produto>>(emptyList()) }
+    var carregando by remember { mutableStateOf(true) }
+    var erroBanco by remember { mutableStateOf(false) }
 
-    var produtoParaEditar by remember {
-        mutableStateOf<Produto?>(null)
-    }
+    var mostrarDialogo by remember { mutableStateOf(false) }
+    var mostrarDialogoEdicao by remember { mutableStateOf(false) }
+    var produtoParaEditar by remember { mutableStateOf<Produto?>(null) }
+    var busca by remember { mutableStateOf("") }
+    var categoriaSelecionada by remember { mutableStateOf("Todos") }
 
-    var busca by remember {
-        mutableStateOf("")
-    }
+    LaunchedEffect(produtoDao) {
+        try {
+            val listaInicial = withContext(Dispatchers.IO) {
+                produtoDao.observarTodos().first()
+            }
 
-    var categoriaSelecionada by remember {
-        mutableStateOf("Todos")
-    }
+            if (listaInicial.isEmpty()) {
+                val produtosIniciais = listOf(
+                    ProdutoEntity(
+                        nome = "Café de Apolo",
+                        descricao = "Café inspirado em Apolo, deus grego associado ao Sol.",
+                        precoCentavos = 1490L,
+                        categoria = "Bebidas"
+                    ),
+                    ProdutoEntity(
+                        nome = "Néctar de Poseidon",
+                        descricao = "Bebida refrescante inspirada em Poseidon, deus dos mares.",
+                        precoCentavos = 1690L,
+                        categoria = "Bebidas"
+                    ),
+                    ProdutoEntity(
+                        nome = "Torta de Hera",
+                        descricao = "Doce inspirado em Hera, rainha dos deuses gregos.",
+                        precoCentavos = 1890L,
+                        categoria = "Doces"
+                    ),
+                    ProdutoEntity(
+                        nome = "Chá de Kitsune",
+                        descricao = "Chá inspirado nas lendárias kitsunes da mitologia japonesa.",
+                        precoCentavos = 1390L,
+                        categoria = "Bebidas"
+                    )
+                )
 
-    // ---------------------------------------------------------
-    // PRODUTOS FILTRADOS
-    // ---------------------------------------------------------
+                withContext(Dispatchers.IO) {
+                    produtoDao.inserirTodos(produtosIniciais)
+                }
+            }
+
+            produtoDao.observarTodos().collect { entidades ->
+                produtos = entidades.map { it.toProduto() }
+                carregando = false
+                erroBanco = false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG_CARDAPIO, "Erro ao carregar produtos do Room", e)
+            erroBanco = true
+            carregando = false
+        }
+    }
 
     val produtosFiltrados = produtos.filter { produto ->
-
         val correspondeBusca =
-            produto.nome.contains(
-                busca,
-                ignoreCase = true
-            ) ||
-                    produto.descricao.contains(
-                        busca,
-                        ignoreCase = true
-                    )
+            produto.nome.contains(busca, ignoreCase = true) ||
+                    produto.descricao.contains(busca, ignoreCase = true)
 
-        val correspondeCategoria =
-            when (categoriaSelecionada) {
-
-                "Todos" -> true
-
-                "Bebidas" ->
-                    produto.categoriaId == 1
-
-                "Doces" ->
-                    produto.categoriaId == 2
-
-                "Salgados" ->
-                    produto.categoriaId == 3
-
-                else -> true
-            }
+        val correspondeCategoria = when (categoriaSelecionada) {
+            "Todos" -> true
+            "Bebidas" -> produto.categoriaId == 1
+            "Doces" -> produto.categoriaId == 2
+            "Salgados" -> produto.categoriaId == 3
+            else -> true
+        }
 
         correspondeBusca && correspondeCategoria
     }
 
-    // ---------------------------------------------------------
-    // TELA
-    // ---------------------------------------------------------
-
     Scaffold(
         containerColor = MytosCream,
-
-        bottomBar = {
-            MytosBottomBar(navController)
-        }
-
+        bottomBar = { MytosBottomBar(navController) }
     ) { paddingValues ->
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MytosCream),
-
-            contentPadding = PaddingValues(
-                bottom = 24.dp
-            ),
-
-            verticalArrangement =
-                Arrangement.spacedBy(0.dp)
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-
-            // =================================================
-            // CABEÇALHO
-            // =================================================
-
             item {
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = 14.dp,
-                            end = 14.dp,
-                            top = 14.dp
-                        )
+                        .padding(start = 14.dp, end = 14.dp, top = 14.dp)
                         .height(128.dp)
-                        .clip(
-                            RoundedCornerShape(26.dp)
-                        )
-                        .background(
-                            MytosPurpleDark
-                        )
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(MytosPurpleDark)
                 ) {
-
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -194,643 +184,367 @@ fun CardapioScreen(
                                 bottom = 16.dp
                             )
                     ) {
-
                         Row(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-
-                            verticalAlignment =
-                                Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-
-                            Column(
-                                modifier =
-                                    Modifier.weight(1f)
-                            ) {
-
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text =
-                                        "MYTOS • CAFÉ E MITOLOGIA",
-
-                                    color =
-                                        MytosYellow,
-
+                                    "MYTOS • CAFÉ E MITOLOGIA",
+                                    color = MytosYellow,
                                     fontSize = 9.sp,
-
-                                    fontWeight =
-                                        FontWeight.Bold,
-
-                                    letterSpacing =
-                                        0.8.sp
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp
                                 )
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(5.dp)
-                                )
-
+                                Spacer(Modifier.height(5.dp))
                                 Text(
-                                    text =
-                                        "Nosso cardápio",
-
-                                    color =
-                                        Color.White,
-
+                                    "Nosso cardápio",
+                                    color = Color.White,
                                     fontSize = 24.sp,
-
-                                    fontWeight =
-                                        FontWeight.ExtraBold
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                             }
 
-                            // ---------------------------------
-                            // BOTÃO +
-                            // ---------------------------------
-
                             IconButton(
-                                onClick = {
-                                    mostrarDialogo = true
-                                },
-
+                                onClick = { mostrarDialogo = true },
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .background(
-                                        color =
-                                            MytosYellow,
-
-                                        shape =
-                                            CircleShape
-                                    )
+                                    .background(MytosYellow, CircleShape)
                             ) {
-
                                 Icon(
-                                    imageVector =
-                                        Icons.Default.Add,
-
-                                    contentDescription =
-                                        "Adicionar novo produto",
-
-                                    tint =
-                                        MytosPurpleDark,
-
-                                    modifier =
-                                        Modifier.size(28.dp)
+                                    Icons.Default.Add,
+                                    contentDescription = "Adicionar novo produto",
+                                    tint = MytosPurpleDark,
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
                         }
 
-                        Spacer(
-                            modifier =
-                                Modifier.height(5.dp)
-                        )
-
+                        Spacer(Modifier.height(5.dp))
                         Text(
-                            text =
-                                "Escolha sua próxima história para saborear.",
-
-                            color =
-                                Color.White.copy(
-                                    alpha = 0.78f
-                                ),
-
+                            "Escolha sua próxima história para saborear.",
+                            color = Color.White.copy(alpha = 0.78f),
                             fontSize = 12.sp
                         )
                     }
                 }
             }
 
-            // =================================================
-            // BUSCA
-            // =================================================
-
             item {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(14.dp)
-                )
-
+                Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value = busca,
-
-                    onValueChange = {
-                        busca = it
-                    },
-
+                    onValueChange = { busca = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            horizontal = 14.dp
-                        )
-                        .height(54.dp),
-
+                        .padding(horizontal = 14.dp),
                     singleLine = true,
-
                     placeholder = {
                         Text(
-                            text =
-                                "O que você deseja saborear?",
-
-                            color =
-                                MytosTextSecondary,
-
+                            "O que você deseja saborear?",
+                            color = MytosTextSecondary,
                             fontSize = 13.sp
                         )
                     },
-
                     leadingIcon = {
                         Icon(
-                            imageVector =
-                                Icons.Default.Search,
-
-                            contentDescription =
-                                "Buscar",
-
-                            tint =
-                                MytosPurple
+                            Icons.Default.Search,
+                            contentDescription = "Buscar produtos",
+                            tint = MytosPurple
                         )
                     },
-
-                    shape =
-                        RoundedCornerShape(17.dp),
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText
-                        )
+                    shape = RoundedCornerShape(17.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MytosPurple,
+                        unfocusedBorderColor = MytosLilac,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = MytosText,
+                        unfocusedTextColor = MytosText
+                    )
                 )
             }
 
-            // =================================================
-            // CATEGORIAS
-            // =================================================
-
             item {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(18.dp)
-                )
-
+                Spacer(Modifier.height(18.dp))
                 Text(
-                    text = "Categorias",
-
-                    color =
-                        MytosPurpleDark,
-
+                    "Categorias",
+                    color = MytosPurpleDark,
                     fontSize = 14.sp,
-
-                    fontWeight =
-                        FontWeight.Bold,
-
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 14.dp
-                        )
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 14.dp)
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(8.dp)
-                )
+                Spacer(Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(
-                            rememberScrollState()
-                        )
-                        .padding(
-                            horizontal = 14.dp
-                        ),
-
-                    horizontalArrangement =
-                        Arrangement.spacedBy(8.dp)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-
                     CategoriaFiltro(
                         nome = "Todos",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    "Todos",
-
-                        icon =
-                            Icons.Default.Category,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                "Todos"
-                        }
-                    )
+                        selecionada = categoriaSelecionada == "Todos",
+                        icon = Icons.Default.Category
+                    ) { categoriaSelecionada = "Todos" }
 
                     CategoriaFiltro(
                         nome = "Bebidas",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    "Bebidas",
-
-                        icon =
-                            Icons.Default.Coffee,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                "Bebidas"
-                        }
-                    )
+                        selecionada = categoriaSelecionada == "Bebidas",
+                        icon = Icons.Default.Coffee
+                    ) { categoriaSelecionada = "Bebidas" }
 
                     CategoriaFiltro(
                         nome = "Doces",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    "Doces",
-
-                        icon =
-                            Icons.Default.Cake,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                "Doces"
-                        }
-                    )
+                        selecionada = categoriaSelecionada == "Doces",
+                        icon = Icons.Default.Cake
+                    ) { categoriaSelecionada = "Doces" }
 
                     CategoriaFiltro(
                         nome = "Salgados",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    "Salgados",
-
-                        icon =
-                            Icons.Default.Restaurant,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                "Salgados"
-                        }
-                    )
+                        selecionada = categoriaSelecionada == "Salgados",
+                        icon = Icons.Default.Restaurant
+                    ) { categoriaSelecionada = "Salgados" }
                 }
             }
 
-            // =================================================
-            // TÍTULO DOS PRODUTOS
-            // =================================================
-
             item {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(22.dp)
-                )
-
+                Spacer(Modifier.height(22.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            horizontal = 14.dp
-                        ),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
                     Text(
-                        text =
-                            "Todos os sabores",
-
-                        color =
-                            MytosPurpleDark,
-
+                        "Todos os sabores",
+                        color = MytosPurpleDark,
                         fontSize = 18.sp,
-
-                        fontWeight =
-                            FontWeight.ExtraBold,
-
-                        modifier =
-                            Modifier.weight(1f)
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
                     )
-
                     Text(
-                        text =
-                            "${produtosFiltrados.size} opções",
-
-                        color =
-                            MytosTextSecondary,
-
+                        "${produtosFiltrados.size} opções",
+                        color = MytosTextSecondary,
                         fontSize = 11.sp
                     )
                 }
-
-                Spacer(
-                    modifier =
-                        Modifier.height(12.dp)
-                )
+                Spacer(Modifier.height(12.dp))
             }
 
-            // =================================================
-            // LISTA DE PRODUTOS
-            // =================================================
-
-            items(
-                items = produtosFiltrados,
-
-                key = {
-                    it.id
-                }
-
-            ) { produto ->
-
-                ProdutoCardMytos(
-                    produto = produto,
-
-                    onClick = {
-
-                        navController.navigate(
-                            "produto/${produto.id}"
-                        )
-                    },
-
-                    onEdit = {
-
-                        produtoParaEditar =
-                            produto
-
-                        mostrarDialogoEdicao =
-                            true
-                    },
-
-                    onDelete = {
-
-                        produtos.remove(
-                            produto
-                        )
-                    }
-                )
-            }
-
-            // =================================================
-            // NENHUM RESULTADO
-            // =================================================
-
-            if (produtosFiltrados.isEmpty()) {
-
+            if (carregando) {
                 item {
-
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MytosPurple)
+                    }
+                }
+            } else if (erroBanco) {
+                item {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(
-                                horizontal = 30.dp,
-                                vertical = 50.dp
-                            ),
-
-                        horizontalAlignment =
-                            Alignment.CenterHorizontally
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Text(
+                            "Não foi possível carregar o cardápio.",
+                            color = MytosPurpleDark
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    carregando = true
+                                    erroBanco = false
+                                    try {
+                                        produtos = withContext(Dispatchers.IO) {
+                                            produtoDao.observarTodos()
+                                                .first()
+                                                .map { it.toProduto() }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(
+                                            TAG_CARDAPIO,
+                                            "Falha ao recarregar produtos",
+                                            e
+                                        )
+                                        erroBanco = true
+                                    } finally {
+                                        carregando = false
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MytosPurple
+                            )
+                        ) {
+                            Text("Tentar novamente")
+                        }
+                    }
+                }
+            } else {
+                items(
+                    items = produtosFiltrados,
+                    key = { it.id }
+                ) { produto ->
+                    ProdutoCardMytos(
+                        produto = produto,
+                        onClick = {
+                            navController.navigate(
+                                "${Rotas.ProdutoDetalhes}/${produto.id}"
+                            )
+                        },
+                        onEdit = {
+                            produtoParaEditar = produto
+                            mostrarDialogoEdicao = true
+                        },
+                        onDelete = {
+                            scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        produtoDao.excluir(produto.id.toLong())
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(
+                                        TAG_CARDAPIO,
+                                        "Erro ao excluir produto ${produto.id}",
+                                        e
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
 
-                        Icon(
-                            imageVector =
+                if (produtosFiltrados.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 30.dp, vertical = 50.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
                                 Icons.Default.Coffee,
-
-                            contentDescription =
-                                null,
-
-                            tint =
-                                MytosPurple.copy(
-                                    alpha = 0.4f
-                                ),
-
-                            modifier =
-                                Modifier.size(50.dp)
-                        )
-
-                        Spacer(
-                            modifier =
-                                Modifier.height(12.dp)
-                        )
-
-                        Text(
-                            text =
+                                contentDescription = null,
+                                tint = MytosPurple.copy(alpha = 0.4f),
+                                modifier = Modifier.size(50.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
                                 "Nenhum sabor encontrado",
-
-                            color =
-                                MytosPurpleDark,
-
-                            fontSize = 16.sp,
-
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-
-                        Spacer(
-                            modifier =
-                                Modifier.height(5.dp)
-                        )
-
-                        Text(
-                            text =
+                                color = MytosPurpleDark,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(5.dp))
+                            Text(
                                 "Tente outra busca ou categoria.",
-
-                            color =
-                                MytosTextSecondary,
-
-                            fontSize = 13.sp
-                        )
+                                color = MytosTextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    // =========================================================
-    // DIALOGO DE NOVO PRODUTO
-    // =========================================================
-
     if (mostrarDialogo) {
-
         NovoProdutoDialog(
+            onDismiss = { mostrarDialogo = false },
+            onAdicionar = { nome, descricao, preco, categoriaId ->
+                scope.launch {
+                    try {
+                        val entidade = Produto(
+                            id = 0,
+                            nome = nome,
+                            descricao = descricao,
+                            preco = preco,
+                            categoriaId = categoriaId
+                        ).toProdutoEntity().copy(id = 0L)
 
-            onDismiss = {
-                mostrarDialogo =
-                    false
-            },
+                        withContext(Dispatchers.IO) {
+                            produtoDao.inserir(entidade)
+                        }
 
-            onAdicionar = {
-                    nome,
-                    descricao,
-                    preco,
-                    categoriaId ->
-
-                val novoId =
-                    (produtos.maxOfOrNull {
-                        it.id
-                    } ?: 0) + 1
-
-                produtos.add(
-                    Produto(
-                        id = novoId,
-
-                        nome = nome,
-
-                        descricao = descricao,
-
-                        preco = preco,
-
-                        categoriaId =
-                            categoriaId
-                    )
-                )
-
-                mostrarDialogo =
-                    false
+                        mostrarDialogo = false
+                    } catch (e: Exception) {
+                        Log.e(TAG_CARDAPIO, "Erro ao cadastrar produto", e)
+                    }
+                }
             }
         )
     }
 
-    // =========================================================
-    // DIALOGO DE EDIÇÃO
-    // =========================================================
-
-    if (mostrarDialogoEdicao &&
-        produtoParaEditar != null
-    ) {
-
+    if (mostrarDialogoEdicao && produtoParaEditar != null) {
         EditarProdutoDialog(
-
-            produto =
-                produtoParaEditar!!,
-
+            produto = produtoParaEditar!!,
             onDismiss = {
-
-                mostrarDialogoEdicao =
-                    false
-
-                produtoParaEditar =
-                    null
+                mostrarDialogoEdicao = false
+                produtoParaEditar = null
             },
+            onSalvar = { produtoAtualizado ->
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            produtoDao.atualizar(
+                                produtoAtualizado.toProdutoEntity()
+                            )
+                        }
 
-            onSalvar = {
-                    produtoAtualizado ->
-
-                val index =
-                    produtos.indexOfFirst {
-                        it.id ==
-                                produtoAtualizado.id
+                        mostrarDialogoEdicao = false
+                        produtoParaEditar = null
+                    } catch (e: Exception) {
+                        Log.e(
+                            TAG_CARDAPIO,
+                            "Erro ao editar produto ${produtoAtualizado.id}",
+                            e
+                        )
                     }
-
-                if (index != -1) {
-
-                    produtos[index] =
-                        produtoAtualizado
                 }
-
-                mostrarDialogoEdicao =
-                    false
-
-                produtoParaEditar =
-                    null
             }
         )
     }
 }
-
-
-// =============================================================
-// FILTRO DE CATEGORIA
-// =============================================================
 
 @Composable
 private fun CategoriaFiltro(
     nome: String,
     selecionada: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
-
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(
-                if (selecionada) {
-                    MytosPurple
-                } else {
-                    Color.White
-                }
-            )
-            .clickable {
-                onClick()
-            }
-            .padding(
-                horizontal = 14.dp,
-                vertical = 9.dp
-            ),
-
-        verticalAlignment =
-            Alignment.CenterVertically
+            .background(if (selecionada) MytosPurple else Color.White)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .semantics { selected = selecionada }
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-
         Icon(
             imageVector = icon,
-
-            contentDescription =
-                null,
-
-            tint =
-                if (selecionada) {
-                    Color.White
-                } else {
-                    MytosPurple
-                },
-
-            modifier =
-                Modifier.size(15.dp)
+            contentDescription = null,
+            tint = if (selecionada) Color.White else MytosPurple,
+            modifier = Modifier.size(15.dp)
         )
-
-        Spacer(
-            modifier =
-                Modifier.width(5.dp)
-        )
-
+        Spacer(Modifier.width(5.dp))
         Text(
-            text = nome,
-
-            color =
-                if (selecionada) {
-                    Color.White
-                } else {
-                    MytosText
-                },
-
+            nome,
+            color = if (selecionada) Color.White else MytosText,
             fontSize = 11.sp,
-
-            fontWeight =
-                FontWeight.Bold
+            fontWeight = FontWeight.Bold
         )
     }
 }
-
-
-// =============================================================
-// CARD DO PRODUTO
-// =============================================================
 
 @Composable
 private fun ProdutoCardMytos(
@@ -839,818 +553,304 @@ private fun ProdutoCardMytos(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                horizontal = 14.dp,
-                vertical = 5.dp
-            )
-            .clickable {
-                onClick()
-            },
-
-        shape =
-            RoundedCornerShape(20.dp),
-
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    Color.White
-            ),
-
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation =
-                    2.dp
-            )
+            .padding(horizontal = 14.dp, vertical = 5.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(10.dp),
-
-            verticalAlignment =
-                Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            // -------------------------------------------------
-            // IMAGEM / ÍCONE
-            // -------------------------------------------------
-
             Box(
                 modifier = Modifier
                     .size(88.dp)
-                    .clip(
-                        RoundedCornerShape(17.dp)
-                    )
-                    .background(
-                        MytosLilacLight
-                    ),
-
-                contentAlignment =
-                    Alignment.Center
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(MytosLilacLight),
+                contentAlignment = Alignment.Center
             ) {
-
                 Box(
                     modifier = Modifier
                         .size(46.dp)
-                        .background(
-                            Color.White,
-                            CircleShape
-                        ),
-
-                    contentAlignment =
-                        Alignment.Center
+                        .background(Color.White, CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-
                     Icon(
-                        imageVector =
-                            if (
-                                produto.categoriaId ==
-                                2
-                            ) {
-
-                                Icons.Default.Cake
-
-                            } else {
-
-                                Icons.Default.Coffee
-                            },
-
-                        contentDescription =
-                            null,
-
-                        tint =
-                            MytosPurple,
-
-                        modifier =
-                            Modifier.size(24.dp)
+                        imageVector = if (produto.categoriaId == 2) {
+                            Icons.Default.Cake
+                        } else {
+                            Icons.Default.Coffee
+                        },
+                        contentDescription = null,
+                        tint = MytosPurple,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
 
-            Spacer(
-                modifier =
-                    Modifier.width(12.dp)
-            )
+            Spacer(Modifier.width(12.dp))
 
-            // -------------------------------------------------
-            // INFORMAÇÕES
-            // -------------------------------------------------
-
-            Column(
-                modifier =
-                    Modifier.weight(1f)
-            ) {
-
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text =
-                        produto.nome,
-
-                    color =
-                        MytosPurpleDark,
-
+                    produto.nome,
+                    color = MytosPurpleDark,
                     fontSize = 15.sp,
-
-                    fontWeight =
-                        FontWeight.Bold,
-
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
-
-                    overflow =
-                        TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(4.dp)
-                )
-
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text =
-                        produto.descricao,
-
-                    color =
-                        MytosTextSecondary,
-
+                    produto.descricao,
+                    color = MytosTextSecondary,
                     fontSize = 11.sp,
-
                     lineHeight = 15.sp,
-
                     maxLines = 2,
-
-                    overflow =
-                        TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(7.dp)
-                )
-
+                Spacer(Modifier.height(7.dp))
                 Text(
-                    text =
-                        String.format(
-                            Locale(
-                                "pt",
-                                "BR"
-                            ),
-
-                            "R$ %.2f",
-
-                            produto.preco
-                        ),
-
-                    color =
-                        MytosPurple,
-
+                    String.format(
+                        Locale("pt", "BR"),
+                        "R$ %.2f",
+                        produto.preco
+                    ),
+                    color = MytosPurple,
                     fontSize = 14.sp,
-
-                    fontWeight =
-                        FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
 
-            // -------------------------------------------------
-            // EDITAR
-            // -------------------------------------------------
-
-            IconButton(
-                onClick = {
-                    onEdit()
-                }
-            ) {
-
+            IconButton(onClick = onEdit) {
                 Icon(
-                    imageVector =
-                        Icons.Default.Edit,
-
-                    contentDescription =
-                        "Editar ${produto.nome}",
-
-                    tint =
-                        MytosPurple,
-
-                    modifier =
-                        Modifier.size(20.dp)
+                    Icons.Default.Edit,
+                    contentDescription = "Editar ${produto.nome}",
+                    tint = MytosPurple,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            // -------------------------------------------------
-            // EXCLUIR
-            // -------------------------------------------------
-
-            IconButton(
-                onClick = {
-                    onDelete()
-                }
-            ) {
-
+            IconButton(onClick = onDelete) {
                 Icon(
-                    imageVector =
-                        Icons.Default.Delete,
-
-                    contentDescription =
-                        "Remover ${produto.nome}",
-
-                    tint =
-                        MytosTextSecondary.copy(
-                            alpha = 0.55f
-                        ),
-
-                    modifier =
-                        Modifier.size(21.dp)
+                    Icons.Default.Delete,
+                    contentDescription = "Remover ${produto.nome}",
+                    tint = MytosTextSecondary.copy(alpha = 0.65f),
+                    modifier = Modifier.size(21.dp)
                 )
             }
         }
     }
 }
 
+@Composable
+private fun CoresCamposProduto() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    disabledTextColor = Color.White.copy(alpha = 0.6f),
+    focusedContainerColor = MytosPurpleDark,
+    unfocusedContainerColor = MytosPurpleDark,
+    disabledContainerColor = MytosPurpleDark,
+    cursorColor = MytosYellow,
+    focusedBorderColor = Color.White,
+    unfocusedBorderColor = Color.White.copy(alpha = 0.75f),
+    disabledBorderColor = Color.White.copy(alpha = 0.4f),
+    focusedLabelColor = MytosYellow,
+    unfocusedLabelColor = Color.White,
+    focusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
+    unfocusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
+    focusedLeadingIconColor = Color.White,
+    unfocusedLeadingIconColor = Color.White
+)
 
-// =============================================================
-// DIALOGO — NOVO PRODUTO
-// =============================================================
+@Composable
+private fun TituloDialogoProduto(texto: String) {
+    Text(
+        texto,
+        color = MytosYellow,
+        fontSize = 21.sp,
+        fontWeight = FontWeight.ExtraBold
+    )
+}
+
+@Composable
+private fun BotoesDialogoProduto(
+    textoConfirmar: String,
+    onConfirmar: () -> Unit,
+    onCancelar: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onCancelar) {
+            Text(
+                "Cancelar",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Button(
+            onClick = onConfirmar,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MytosYellow,
+                contentColor = MytosPurpleDark
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                textoConfirmar,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+    }
+}
 
 @Composable
 private fun NovoProdutoDialog(
     onDismiss: () -> Unit,
-
-    onAdicionar: (
-        String,
-        String,
-        Double,
-        Int
-    ) -> Unit
+    onAdicionar: (String, String, Double, Int) -> Unit
 ) {
-
-    var nome by remember {
-        mutableStateOf("")
-    }
-
-    var descricao by remember {
-        mutableStateOf("")
-    }
-
-    var preco by remember {
-        mutableStateOf("")
-    }
-
-    var categoriaSelecionada by remember {
-        mutableStateOf(1)
-    }
-
-    var erroNome by remember {
-        mutableStateOf(false)
-    }
-
-    var erroDescricao by remember {
-        mutableStateOf(false)
-    }
-
-    var erroPreco by remember {
-        mutableStateOf(false)
-    }
-
-    val focusManager =
-        LocalFocusManager.current
+    var nome by remember { mutableStateOf("") }
+    var descricao by remember { mutableStateOf("") }
+    var preco by remember { mutableStateOf("") }
+    var categoriaSelecionada by remember { mutableIntStateOf(1) }
+    var erro by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     AlertDialog(
-        onDismissRequest =
-            onDismiss,
-
-        title = {
-
-            Text(
-                text =
-                    "Novo produto",
-
-                color =
-                    MytosPurpleDark,
-
-                fontWeight =
-                    FontWeight.ExtraBold
-            )
-        },
-
+        onDismissRequest = onDismiss,
+        title = { TituloDialogoProduto("Novo Produto") },
         text = {
-
-            Column {
-
-                // =================================================
-                // NOME
-                // =================================================
-
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
                 OutlinedTextField(
                     value = nome,
-
                     onValueChange = {
-
                         nome = it
-
-                        erroNome = false
+                        erro = false
                     },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Nome do produto"
-                        )
-                    },
-
-                    isError =
-                        erroNome,
-
-                    supportingText = {
-
-                        if (erroNome) {
-
-                            Text(
-                                text =
-                                    "Digite o nome do produto.",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
-                        }
-                    },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    label = { Text("Nome do produto") },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                // =================================================
-                // DESCRIÇÃO
-                // =================================================
 
                 OutlinedTextField(
-                    value =
-                        descricao,
-
+                    value = descricao,
                     onValueChange = {
-
                         descricao = it
-
-                        erroDescricao = false
+                        erro = false
                     },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Descrição"
-                        )
-                    },
-
-                    isError =
-                        erroDescricao,
-
-                    supportingText = {
-
-                        if (erroDescricao) {
-
-                            Text(
-                                text =
-                                    "Digite uma descrição.",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
-                        }
-                    },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    label = { Text("Descrição") },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                // =================================================
-                // PREÇO
-                // =================================================
 
                 OutlinedTextField(
-                    value =
-                        preco,
-
-                    onValueChange = { novoValor ->
-
-                        preco =
-                            novoValor.filter {
-
-                                it.isDigit() ||
-                                        it == ',' ||
-                                        it == '.'
-                            }
-
-                        erroPreco = false
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Preço"
-                        )
-                    },
-
-                    isError =
-                        erroPreco,
-
-                    supportingText = {
-
-                        if (erroPreco) {
-
-                            Text(
-                                text =
-                                    "Digite um preço válido. Ex.: 14,90",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
+                    value = preco,
+                    onValueChange = {
+                        preco = it.filter { c ->
+                            c.isDigit() || c == ',' || c == '.'
                         }
+                        erro = false
                     },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            keyboardType =
-                                KeyboardType.Decimal,
-
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Preço (ex.: 14,90)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(
-                    modifier =
-                        Modifier.height(16.dp)
-                )
-
-                // =================================================
-                // CATEGORIA
-                // =================================================
+                if (erro) {
+                    Text(
+                        "Preencha os campos e informe um preço maior que zero.",
+                        color = MytosYellow,
+                        fontSize = 12.sp
+                    )
+                }
 
                 Text(
-                    text =
-                        "Categoria",
-
-                    color =
-                        MytosPurpleDark,
-
-                    fontSize = 13.sp,
-
-                    fontWeight =
-                        FontWeight.Bold
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(8.dp)
+                    "Categoria",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
                 )
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(
-                            rememberScrollState()
-                        ),
-
-                    horizontalArrangement =
-                        Arrangement.spacedBy(7.dp)
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Bebidas",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    1,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                1
-                        }
-                    )
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Doces",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    2,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                2
-                        }
-                    )
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Salgados",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    3,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                3
-                        }
-                    )
+                    listOf(
+                        "Bebidas" to 1,
+                        "Doces" to 2,
+                        "Salgados" to 3
+                    ).forEach { (texto, id) ->
+                        CategoriaDialogButton(
+                            nome = texto,
+                            selecionada = categoriaSelecionada == id,
+                            onClick = { categoriaSelecionada = id }
+                        )
+                    }
                 }
             }
         },
-
-        // =========================================================
-        // ADICIONAR
-        // =========================================================
-
         confirmButton = {
-
-            Button(
-                onClick = {
-
-                    val precoNumerico =
-                        preco
-                            .replace(
-                                ",",
-                                "."
-                            )
-                            .toDoubleOrNull()
-
-                    erroNome =
-                        nome.isBlank()
-
-                    erroDescricao =
-                        descricao.isBlank()
-
-                    erroPreco =
-                        preco.isBlank() ||
-                                precoNumerico == null ||
-                                precoNumerico <= 0
+            BotoesDialogoProduto(
+                textoConfirmar = "Adicionar",
+                onCancelar = onDismiss,
+                onConfirmar = {
+                    val valor = preco.replace(",", ".").toDoubleOrNull()
 
                     if (
-                        !erroNome &&
-                        !erroDescricao &&
-                        !erroPreco &&
-                        precoNumerico != null
+                        nome.isBlank() ||
+                        descricao.isBlank() ||
+                        valor == null ||
+                        !valor.isFinite() ||
+                        valor <= 0
                     ) {
-
+                        erro = true
+                    } else {
                         onAdicionar(
                             nome.trim(),
-
                             descricao.trim(),
-
-                            precoNumerico,
-
+                            valor,
                             categoriaSelecionada
                         )
                     }
-                },
-
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor =
-                            MytosPurple
-                    )
-            ) {
-
-                Text(
-                    text =
-                        "Adicionar",
-
-                    fontWeight =
-                        FontWeight.Bold
-                )
-            }
+                }
+            )
         },
-
-        dismissButton = {
-
-            TextButton(
-                onClick =
-                    onDismiss
-            ) {
-
-                Text(
-                    text =
-                        "Cancelar",
-
-                    color =
-                        MytosPurple
-                )
-            }
-        },
-
-        containerColor =
-            Color.White,
-
-        shape =
-            RoundedCornerShape(28.dp)
+        containerColor = MytosPurple,
+        shape = RoundedCornerShape(24.dp),
+        titleContentColor = MytosYellow,
+        textContentColor = Color.White
     )
 }
-
-
-// =============================================================
-// DIALOGO — EDITAR PRODUTO
-// =============================================================
 
 @Composable
 private fun EditarProdutoDialog(
@@ -1658,607 +858,146 @@ private fun EditarProdutoDialog(
     onDismiss: () -> Unit,
     onSalvar: (Produto) -> Unit
 ) {
-
-    var nome by remember(
-        produto.id
-    ) {
-        mutableStateOf(
-            produto.nome
-        )
+    var nome by remember(produto.id) { mutableStateOf(produto.nome) }
+    var descricao by remember(produto.id) { mutableStateOf(produto.descricao) }
+    var preco by remember(produto.id) {
+        mutableStateOf(produto.preco.toString().replace(".", ","))
     }
-
-    var descricao by remember(
-        produto.id
-    ) {
-        mutableStateOf(
-            produto.descricao
-        )
+    var categoriaSelecionada by remember(produto.id) {
+        mutableIntStateOf(produto.categoriaId)
     }
-
-    var preco by remember(
-        produto.id
-    ) {
-        mutableStateOf(
-            produto.preco
-                .toString()
-                .replace(
-                    ".",
-                    ","
-                )
-        )
-    }
-
-    var categoriaSelecionada by remember(
-        produto.id
-    ) {
-        mutableStateOf(
-            produto.categoriaId
-        )
-    }
-
-    var erroNome by remember {
-        mutableStateOf(false)
-    }
-
-    var erroDescricao by remember {
-        mutableStateOf(false)
-    }
-
-    var erroPreco by remember {
-        mutableStateOf(false)
-    }
-
-    val focusManager =
-        LocalFocusManager.current
+    var erro by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     AlertDialog(
-        onDismissRequest =
-            onDismiss,
-
-        title = {
-
-            Text(
-                text =
-                    "Editar produto",
-
-                color =
-                    MytosPurpleDark,
-
-                fontWeight =
-                    FontWeight.ExtraBold
-            )
-        },
-
+        onDismissRequest = onDismiss,
+        title = { TituloDialogoProduto("Editar Produto") },
         text = {
-
-            Column {
-
-                // =================================================
-                // NOME
-                // =================================================
-
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
                 OutlinedTextField(
-                    value =
-                        nome,
-
+                    value = nome,
                     onValueChange = {
-
                         nome = it
-
-                        erroNome = false
+                        erro = false
                     },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Nome do produto"
-                        )
-                    },
-
-                    isError =
-                        erroNome,
-
-                    supportingText = {
-
-                        if (erroNome) {
-
-                            Text(
-                                text =
-                                    "Digite o nome do produto.",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
-                        }
-                    },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    label = { Text("Nome do produto") },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                // =================================================
-                // DESCRIÇÃO
-                // =================================================
 
                 OutlinedTextField(
-                    value =
-                        descricao,
-
+                    value = descricao,
                     onValueChange = {
-
                         descricao = it
-
-                        erroDescricao = false
+                        erro = false
                     },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Descrição"
-                        )
-                    },
-
-                    isError =
-                        erroDescricao,
-
-                    supportingText = {
-
-                        if (erroDescricao) {
-
-                            Text(
-                                text =
-                                    "Digite uma descrição.",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
-                        }
-                    },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    label = { Text("Descrição") },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(10.dp)
-                )
-
-                // =================================================
-                // PREÇO
-                // =================================================
 
                 OutlinedTextField(
-                    value =
-                        preco,
-
-                    onValueChange = { novoValor ->
-
-                        preco =
-                            novoValor.filter {
-
-                                it.isDigit() ||
-                                        it == ',' ||
-                                        it == '.'
-                            }
-
-                        erroPreco = false
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    singleLine = true,
-
-                    label = {
-                        Text(
-                            text =
-                                "Preço"
-                        )
-                    },
-
-                    isError =
-                        erroPreco,
-
-                    supportingText = {
-
-                        if (erroPreco) {
-
-                            Text(
-                                text =
-                                    "Digite um preço válido. Ex.: 14,90",
-
-                                color =
-                                    Color(
-                                        0xFFD94C59
-                                    )
-                            )
+                    value = preco,
+                    onValueChange = {
+                        preco = it.filter { c ->
+                            c.isDigit() || c == ',' || c == '.'
                         }
+                        erro = false
                     },
-
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-
-                            focusedTextColor =
-                                MytosText,
-
-                            unfocusedTextColor =
-                                MytosText,
-
-                            errorTextColor =
-                                MytosText,
-
-                            focusedLabelColor =
-                                MytosText,
-
-                            unfocusedLabelColor =
-                                MytosText,
-
-                            errorLabelColor =
-                                MytosText,
-
-                            cursorColor =
-                                MytosPurple,
-
-                            focusedBorderColor =
-                                MytosPurple,
-
-                            unfocusedBorderColor =
-                                MytosLilac,
-
-                            errorBorderColor =
-                                Color(
-                                    0xFFD94C59
-                                ),
-
-                            focusedContainerColor =
-                                Color.White,
-
-                            unfocusedContainerColor =
-                                Color.White,
-
-                            errorContainerColor =
-                                Color.White
-                        ),
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            keyboardType =
-                                KeyboardType.Decimal,
-
-                            imeAction =
-                                ImeAction.Done
-                        ),
-
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = {
-                                focusManager
-                                    .clearFocus()
-                            }
-                        )
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Preço (ex.: 14,90)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    ),
+                    colors = CoresCamposProduto(),
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(
-                    modifier =
-                        Modifier.height(16.dp)
-                )
-
-                // =================================================
-                // CATEGORIA
-                // =================================================
+                if (erro) {
+                    Text(
+                        "Preencha os campos e informe um preço maior que zero.",
+                        color = MytosYellow,
+                        fontSize = 12.sp
+                    )
+                }
 
                 Text(
-                    text =
-                        "Categoria",
-
-                    color =
-                        MytosPurpleDark,
-
-                    fontSize = 13.sp,
-
-                    fontWeight =
-                        FontWeight.Bold
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(8.dp)
+                    "Categoria",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
                 )
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(
-                            rememberScrollState()
-                        ),
-
-                    horizontalArrangement =
-                        Arrangement.spacedBy(7.dp)
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Bebidas",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    1,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                1
-                        }
-                    )
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Doces",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    2,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                2
-                        }
-                    )
-
-                    CategoriaDialogButton(
-                        nome =
-                            "Salgados",
-
-                        selecionada =
-                            categoriaSelecionada ==
-                                    3,
-
-                        onClick = {
-                            categoriaSelecionada =
-                                3
-                        }
-                    )
+                    listOf(
+                        "Bebidas" to 1,
+                        "Doces" to 2,
+                        "Salgados" to 3
+                    ).forEach { (texto, id) ->
+                        CategoriaDialogButton(
+                            nome = texto,
+                            selecionada = categoriaSelecionada == id,
+                            onClick = { categoriaSelecionada = id }
+                        )
+                    }
                 }
             }
         },
-
-        // =========================================================
-        // SALVAR
-        // =========================================================
-
         confirmButton = {
-
-            Button(
-                onClick = {
-
-                    val precoNumerico =
-                        preco
-                            .replace(
-                                ",",
-                                "."
-                            )
-                            .toDoubleOrNull()
-
-                    erroNome =
-                        nome.isBlank()
-
-                    erroDescricao =
-                        descricao.isBlank()
-
-                    erroPreco =
-                        preco.isBlank() ||
-                                precoNumerico == null ||
-                                precoNumerico <= 0
+            BotoesDialogoProduto(
+                textoConfirmar = "Salvar",
+                onCancelar = onDismiss,
+                onConfirmar = {
+                    val valor = preco.replace(",", ".").toDoubleOrNull()
 
                     if (
-                        !erroNome &&
-                        !erroDescricao &&
-                        !erroPreco &&
-                        precoNumerico != null
+                        nome.isBlank() ||
+                        descricao.isBlank() ||
+                        valor == null ||
+                        !valor.isFinite() ||
+                        valor <= 0
                     ) {
-
+                        erro = true
+                    } else {
                         onSalvar(
                             Produto(
-                                id =
-                                    produto.id,
-
-                                nome =
-                                    nome.trim(),
-
-                                descricao =
-                                    descricao.trim(),
-
-                                preco =
-                                    precoNumerico,
-
-                                categoriaId =
-                                    categoriaSelecionada
+                                id = produto.id,
+                                nome = nome.trim(),
+                                descricao = descricao.trim(),
+                                preco = valor,
+                                categoriaId = categoriaSelecionada
                             )
                         )
                     }
-                },
-
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor =
-                            MytosPurple
-                    )
-            ) {
-
-                Text(
-                    text =
-                        "Salvar",
-
-                    fontWeight =
-                        FontWeight.Bold
-                )
-            }
+                }
+            )
         },
-
-        // =========================================================
-        // CANCELAR
-        // =========================================================
-
-        dismissButton = {
-
-            TextButton(
-                onClick =
-                    onDismiss
-            ) {
-
-                Text(
-                    text =
-                        "Cancelar",
-
-                    color =
-                        MytosPurple
-                )
-            }
-        },
-
-        containerColor =
-            Color.White,
-
-        shape =
-            RoundedCornerShape(28.dp)
+        containerColor = MytosPurple,
+        shape = RoundedCornerShape(24.dp),
+        titleContentColor = MytosYellow,
+        textContentColor = Color.White
     )
 }
-
-
-// =============================================================
-// CATEGORIA DO DIALOGO
-// =============================================================
 
 @Composable
 private fun CategoriaDialogButton(
@@ -2266,40 +1005,47 @@ private fun CategoriaDialogButton(
     selecionada: Boolean,
     onClick: () -> Unit
 ) {
-
     Text(
-        text =
-            nome,
-
-        color =
-            if (selecionada) {
-                Color.White
-            } else {
-                MytosPurple
-            },
-
+        text = nome,
+        color = if (selecionada) MytosPurpleDark else Color.White,
         fontSize = 11.sp,
-
-        fontWeight =
-            FontWeight.Bold,
-
+        fontWeight = FontWeight.Bold,
         modifier = Modifier
-            .clip(
-                CircleShape
-            )
+            .clip(CircleShape)
             .background(
-                if (selecionada) {
-                    MytosPurple
-                } else {
-                    MytosLilac
-                }
+                if (selecionada) MytosYellow else Color.Transparent
             )
-            .clickable {
-                onClick()
-            }
-            .padding(
-                horizontal = 13.dp,
-                vertical = 8.dp
+            .then(
+                if (selecionada) Modifier else Modifier.border(
+                    width = 1.dp,
+                    color = Color.White,
+                    shape = CircleShape
+                )
             )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 9.dp)
+    )
+}
+
+private fun Produto.toProdutoEntity(): ProdutoEntity {
+    val centavos = (preco * 100)
+        .toBigDecimal()
+        .setScale(0, RoundingMode.HALF_UP)
+        .longValueExact()
+
+    val categoria = when (categoriaId) {
+        1 -> "Bebidas"
+        2 -> "Doces"
+        3 -> "Salgados"
+        else -> "Bebidas"
+    }
+
+    return ProdutoEntity(
+        id = id.toLong(),
+        nome = nome.trim(),
+        descricao = descricao.trim(),
+        precoCentavos = centavos,
+        categoria = categoria,
+        disponivel = true
     )
 }

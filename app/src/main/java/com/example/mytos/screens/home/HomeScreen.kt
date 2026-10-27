@@ -1,3 +1,4 @@
+
 package com.example.mytos.screens.home
 
 import androidx.compose.foundation.Image
@@ -33,12 +34,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,8 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.mytos.R
-import com.example.mytos.data.SacolaData
 import com.example.mytos.Rotas
+import com.example.mytos.data.MytosDatabase
+import com.example.mytos.data.SacolaData
+import com.example.mytos.data.toProduto
 import com.example.mytos.ui.components.MytosBottomBar
 import com.example.mytos.ui.theme.MytosCream
 import com.example.mytos.ui.theme.MytosLilac
@@ -57,35 +63,40 @@ import com.example.mytos.ui.theme.MytosPurpleDark
 import com.example.mytos.ui.theme.MytosText
 import com.example.mytos.ui.theme.MytosTextSecondary
 import com.example.mytos.ui.theme.MytosYellow
+import com.example.mytos.model.Produto
 import java.util.Locale
-import com.example.mytos.data.produtos
 
 @Composable
 fun HomeScreen(
     navController: NavController
 ) {
+    val context = LocalContext.current
+    val produtoDao = MytosDatabase
+        .getDatabase(context.applicationContext)
+        .produtoDao()
+
+    // Os produtos são observados diretamente no Room.
+    val produtosEntity by produtoDao
+        .observarTodos()
+        .collectAsState(initial = emptyList())
+
+    val produtosDestaque = produtosEntity.map { it.toProduto() }
 
     Scaffold(
         containerColor = MytosCream,
-
         bottomBar = {
             MytosBottomBar(navController)
         }
-
     ) { paddingValues ->
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(
-                    rememberScrollState()
-                )
+                .verticalScroll(rememberScrollState())
         ) {
 
-            // =====================================================
             // CABEÇALHO
-            // =====================================================
 
             Box(
                 modifier = Modifier
@@ -99,7 +110,6 @@ fun HomeScreen(
                     )
                     .background(MytosPurpleDark)
             ) {
-
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -110,12 +120,10 @@ fun HomeScreen(
                             bottom = 20.dp
                         )
                 ) {
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
@@ -125,7 +133,6 @@ fun HomeScreen(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-
                             Icon(
                                 painter = painterResource(
                                     id = R.drawable.mytos_logo_white
@@ -136,14 +143,11 @@ fun HomeScreen(
                             )
                         }
 
-                        Spacer(
-                            modifier = Modifier.width(12.dp)
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         Column(
                             modifier = Modifier.weight(1f)
                         ) {
-
                             Text(
                                 text = "MYTOS",
                                 color = Color.White,
@@ -162,9 +166,7 @@ fun HomeScreen(
 
                         IconButton(
                             onClick = {
-                                navController.navigate(
-                                    Rotas.Perfil
-                                )
+                                navController.navigate(Rotas.Perfil)
                             },
                             modifier = Modifier
                                 .size(46.dp)
@@ -173,7 +175,6 @@ fun HomeScreen(
                                     shape = CircleShape
                                 )
                         ) {
-
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = "Abrir perfil",
@@ -183,9 +184,7 @@ fun HomeScreen(
                         }
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(30.dp)
-                    )
+                    Spacer(modifier = Modifier.height(30.dp))
 
                     Text(
                         text = "Sabores que contam histórias.",
@@ -194,9 +193,7 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    Spacer(
-                        modifier = Modifier.height(5.dp)
-                    )
+                    Spacer(modifier = Modifier.height(5.dp))
 
                     Text(
                         text = "Descubra uma experiência diferente a cada visita.",
@@ -206,10 +203,7 @@ fun HomeScreen(
                 }
             }
 
-
-            // =====================================================
             // SAUDAÇÃO
-            // =====================================================
 
             Column(
                 modifier = Modifier
@@ -220,7 +214,6 @@ fun HomeScreen(
                         top = 22.dp
                     )
             ) {
-
                 Text(
                     text = "Olá, seja bem-vindo! ✨",
                     color = MytosPurpleDark,
@@ -228,9 +221,7 @@ fun HomeScreen(
                     fontWeight = FontWeight.ExtraBold
                 )
 
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
+                Spacer(modifier = Modifier.height(5.dp))
 
                 Text(
                     text = "Que tal descobrir um novo sabor hoje?",
@@ -239,46 +230,31 @@ fun HomeScreen(
                 )
             }
 
+            Spacer(modifier = Modifier.height(20.dp))
 
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-
-            // =====================================================
-            // DESTAQUE
-            // =====================================================
+            // DESTAQUE DO CARDÁPIO
 
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .clickable {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     },
-
                 shape = RoundedCornerShape(26.dp),
-
                 colors = CardDefaults.cardColors(
                     containerColor = MytosPurple
                 )
             ) {
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-
                     Column(
                         modifier = Modifier.weight(1f)
                     ) {
-
                         Text(
                             text = "O sabor dos deuses",
                             color = Color.White,
@@ -286,9 +262,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
 
-                        Spacer(
-                            modifier = Modifier.height(6.dp)
-                        )
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
                             text = "Explore bebidas e doces inspirados em diferentes mitologias.",
@@ -297,9 +271,7 @@ fun HomeScreen(
                             lineHeight = 18.sp
                         )
 
-                        Spacer(
-                            modifier = Modifier.height(16.dp)
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
                             text = "EXPLORAR  →",
@@ -317,10 +289,8 @@ fun HomeScreen(
                                 Color.White.copy(alpha = 0.13f),
                                 CircleShape
                             ),
-
                         contentAlignment = Alignment.Center
                     ) {
-
                         Icon(
                             imageVector = Icons.Default.Coffee,
                             contentDescription = "Explorar cardápio",
@@ -331,25 +301,16 @@ fun HomeScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(28.dp))
 
-            Spacer(
-                modifier = Modifier.height(28.dp)
-            )
-
-
-            // =====================================================
             // CATEGORIAS
-            // =====================================================
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-
-                verticalAlignment =
-                    Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Text(
                     text = "Explore o cardápio",
                     color = MytosPurpleDark,
@@ -363,40 +324,26 @@ fun HomeScreen(
                     color = MytosPurple,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-
                     modifier = Modifier.clickable {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     }
                 )
             }
 
-
-            Spacer(
-                modifier = Modifier.height(14.dp)
-            )
-
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(
-                        rememberScrollState()
-                    )
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp),
-
-                horizontalArrangement =
-                    Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-
                 CategoriaHomeCard(
                     nome = "Bebidas",
                     icon = Icons.Default.Coffee,
                     onClick = {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     }
                 )
 
@@ -404,9 +351,7 @@ fun HomeScreen(
                     nome = "Doces",
                     icon = Icons.Default.Cake,
                     onClick = {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     }
                 )
 
@@ -414,32 +359,21 @@ fun HomeScreen(
                     nome = "Salgados",
                     icon = Icons.Default.Restaurant,
                     onClick = {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     }
                 )
             }
 
+            Spacer(modifier = Modifier.height(28.dp))
 
-            Spacer(
-                modifier = Modifier.height(28.dp)
-            )
-
-
-            // =====================================================
             // DESTAQUES DO MYTOS
-            // =====================================================
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-
-                verticalAlignment =
-                    Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Text(
                     text = "Destaques do MYTOS",
                     color = MytosPurpleDark,
@@ -453,89 +387,64 @@ fun HomeScreen(
                     color = MytosPurple,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-
                     modifier = Modifier.clickable {
-                        navController.navigate(
-                            Rotas.Cardapio
-                        )
+                        navController.navigate(Rotas.Cardapio)
                     }
                 )
             }
 
-
-            Spacer(
-                modifier = Modifier.height(14.dp)
-            )
-
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(
-                        rememberScrollState()
-                    )
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp),
-
-                horizontalArrangement =
-                    Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-
-                produtos.take(3).forEach { produto ->
-
-                    ProdutoDestaqueCard(
-
-                        produtoId = produto.id,
-
-                        nome = produto.nome,
-
-                        descricao = produto.descricao,
-
-                        preco = produto.preco,
-
-                        onClick = {
-                            navController.navigate(
-                                "produto/${produto.id}"
-                            )
-                        }
+                if (produtosDestaque.isEmpty()) {
+                    Text(
+                        text = "Os produtos aparecerão aqui quando estiverem cadastrados no cardápio.",
+                        color = MytosTextSecondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(vertical = 12.dp)
                     )
+                } else {
+                    produtosDestaque.forEach { produto ->
+                        ProdutoDestaqueCard(
+                            produto = produto,
+                            onClick = {
+                                navController.navigate(
+                                    "${Rotas.ProdutoDetalhes}/${produto.id}"
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
+            Spacer(modifier = Modifier.height(30.dp))
 
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
-
-
-            // =====================================================
             // PERSONAGENS
-            // =====================================================
 
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-
                 shape = RoundedCornerShape(26.dp),
-
                 colors = CardDefaults.cardColors(
                     containerColor = Color.White
                 )
             ) {
-
                 Column(
                     modifier = Modifier.padding(18.dp)
                 ) {
-
                     Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-
                         Column(
                             modifier = Modifier.weight(1f)
                         ) {
-
                             Text(
                                 text = "Conheça nossos personagens",
                                 color = MytosPurpleDark,
@@ -543,9 +452,7 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold
                             )
 
-                            Spacer(
-                                modifier = Modifier.height(5.dp)
-                            )
+                            Spacer(modifier = Modifier.height(5.dp))
 
                             Text(
                                 text = "Leve um pedacinho do MYTOS com você e conheça nossa coleção de personagens.",
@@ -563,54 +470,31 @@ fun HomeScreen(
                         )
                     }
 
-
-                    Spacer(
-                        modifier = Modifier.height(18.dp)
-                    )
-
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(190.dp)
-                            .clip(
-                                RoundedCornerShape(20.dp)
-                            )
-                            .background(
-                                MytosLilacLight
-                            ),
-
-                        contentAlignment =
-                            Alignment.Center
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MytosLilacLight),
+                        contentAlignment = Alignment.Center
                     ) {
-
                         Image(
                             painter = painterResource(
                                 id = R.drawable.toys
                             ),
-
-                            contentDescription =
-                                "Personagens Iago, Bast e Mika",
-
-                            modifier =
-                                Modifier.fillMaxSize(),
-
-                            contentScale =
-                                ContentScale.Fit
+                            contentDescription = "Personagens Iago, Bast e Mika",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
                         )
                     }
                 }
             }
 
+            Spacer(modifier = Modifier.height(30.dp))
 
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
-
-
-            // =====================================================
             // FRASE FINAL
-            // =====================================================
 
             Column(
                 modifier = Modifier
@@ -620,11 +504,8 @@ fun HomeScreen(
                         end = 20.dp,
                         bottom = 28.dp
                     ),
-
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Icon(
                     imageVector = Icons.Default.Star,
                     contentDescription = null,
@@ -632,9 +513,7 @@ fun HomeScreen(
                     modifier = Modifier.size(25.dp)
                 )
 
-                Spacer(
-                    modifier = Modifier.height(7.dp)
-                )
+                Spacer(modifier = Modifier.height(7.dp))
 
                 Text(
                     text = "Café, sabor e lendas.",
@@ -643,9 +522,7 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
+                Spacer(modifier = Modifier.height(5.dp))
 
                 Text(
                     text = "Um universo inspirado em mitologias.",
@@ -657,10 +534,7 @@ fun HomeScreen(
     }
 }
 
-
-// =============================================================
 // CARD DE CATEGORIA
-// =============================================================
 
 @Composable
 private fun CategoriaHomeCard(
@@ -668,18 +542,12 @@ private fun CategoriaHomeCard(
     icon: ImageVector,
     onClick: () -> Unit
 ) {
-
     Column(
         modifier = Modifier
             .width(82.dp)
-            .clickable {
-                onClick()
-            },
-
-        horizontalAlignment =
-            Alignment.CenterHorizontally
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
         Box(
             modifier = Modifier
                 .size(62.dp)
@@ -687,11 +555,8 @@ private fun CategoriaHomeCard(
                     color = MytosLilac,
                     shape = RoundedCornerShape(20.dp)
                 ),
-
-            contentAlignment =
-                Alignment.Center
+            contentAlignment = Alignment.Center
         ) {
-
             Icon(
                 imageVector = icon,
                 contentDescription = nome,
@@ -700,9 +565,7 @@ private fun CategoriaHomeCard(
             )
         }
 
-        Spacer(
-            modifier = Modifier.height(7.dp)
-        )
+        Spacer(modifier = Modifier.height(7.dp))
 
         Text(
             text = nome,
@@ -713,53 +576,33 @@ private fun CategoriaHomeCard(
     }
 }
 
-
-// =============================================================
-// CARD DE PRODUTO DA HOME
-// =============================================================
+// CARD DE PRODUTO EM DESTAQUE
 
 @Composable
 private fun ProdutoDestaqueCard(
-    produtoId: Int,
-    nome: String,
-    descricao: String,
-    preco: Double,
+    produto: Produto,
     onClick: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
             .width(185.dp)
-            .clickable {
-                onClick()
-            },
-
+            .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
-
         colors = CardDefaults.cardColors(
             containerColor = Color.White
         )
     ) {
-
         Column(
             modifier = Modifier.padding(10.dp)
         ) {
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp)
-                    .clip(
-                        RoundedCornerShape(15.dp)
-                    )
-                    .background(
-                        MytosLilacLight
-                    ),
-
-                contentAlignment =
-                    Alignment.Center
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(MytosLilacLight),
+                contentAlignment = Alignment.Center
             ) {
-
                 Icon(
                     imageVector = Icons.Default.Coffee,
                     contentDescription = null,
@@ -768,60 +611,39 @@ private fun ProdutoDestaqueCard(
                 )
             }
 
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
-
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = nome,
+                text = produto.nome,
                 color = MytosPurpleDark,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-
                 maxLines = 1,
-
-                overflow =
-                    TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis
             )
 
-
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
-
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = descricao,
+                text = produto.descricao,
                 color = MytosTextSecondary,
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
-
                 maxLines = 2,
-
-                overflow =
-                    TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis
             )
 
-
-            Spacer(
-                modifier = Modifier.height(9.dp)
-            )
-
+            Spacer(modifier = Modifier.height(9.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-
-                verticalAlignment =
-                    Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Text(
                     text = String.format(
                         Locale.forLanguageTag("pt-BR"),
                         "R$ %.2f",
-                        preco
+                        produto.preco
                     ),
                     color = MytosPurple,
                     fontSize = 14.sp,
@@ -831,10 +653,7 @@ private fun ProdutoDestaqueCard(
 
                 IconButton(
                     onClick = {
-                        val produtoEncontrado = produtos.find { it.id == produtoId }
-                        if (produtoEncontrado != null) {
-                            SacolaData.adicionarProduto(produtoEncontrado)
-                        }
+                        SacolaData.adicionarProduto(produto)
                     },
                     modifier = Modifier
                         .size(34.dp)
@@ -843,7 +662,6 @@ private fun ProdutoDestaqueCard(
                             shape = CircleShape
                         )
                 ) {
-                    // Aqui deve estar o Icon do botão, por exemplo:
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Adicionar à sacola",

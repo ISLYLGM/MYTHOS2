@@ -52,7 +52,7 @@ import com.example.mytos.ui.theme.MytosYellow
 
 @Composable
 fun AcessibilidadeScreen(
-    onContinuar: () -> Unit
+    onContinuar: (Boolean) -> Unit
 ) {
     var usaTalkBack by remember {
         mutableStateOf(false)
@@ -366,7 +366,7 @@ fun AcessibilidadeScreen(
                     // ==========================================
 
                     OutlinedButton(
-                        onClick = onContinuar,
+                        onClick = { onContinuar(usaTalkBack) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp),
@@ -377,7 +377,11 @@ fun AcessibilidadeScreen(
                     ) {
 
                         Text(
-                            text = "CONTINUAR PADRÃO",
+                            text = if (usaTalkBack) {
+                                "CONTINUAR"
+                            } else {
+                                "CONTINUAR PADRÃO"
+                            },
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.1.sp

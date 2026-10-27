@@ -1,5 +1,8 @@
+
 package com.example.mytos.screens.perfil
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,14 +44,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.mytos.data.AuthRepository
 import com.example.mytos.Rotas
+import com.example.mytos.data.AcessibilidadeConfig
+import com.example.mytos.data.AuthRepository
 import com.example.mytos.ui.components.MytosBottomBar
 import com.example.mytos.ui.theme.MytosCream
 import com.example.mytos.ui.theme.MytosPurple
@@ -60,6 +66,7 @@ fun PerfilScreen(
     navController: NavController,
     authRepository: AuthRepository
 ) {
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
 
@@ -71,6 +78,12 @@ fun PerfilScreen(
     var erroPerfil by remember { mutableStateOf<String?>(null) }
     var salvando by remember { mutableStateOf(false) }
 
+    // Carrega a preferência de acessibilidade salva no aparelho.
+    LaunchedEffect(Unit) {
+        AcessibilidadeConfig.carregar(context)
+    }
+
+    // Carrega os dados da conta atualmente conectada.
     LaunchedEffect(authRepository) {
         carregando = true
 
@@ -85,7 +98,7 @@ fun PerfilScreen(
             } else {
                 erroPerfil = "Sua sessão expirou. Entre novamente."
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             erroPerfil = "Não foi possível carregar seu perfil."
         } finally {
             carregando = false
@@ -98,6 +111,7 @@ fun PerfilScreen(
         },
         containerColor = MytosCream
     ) { paddingValues ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -106,6 +120,8 @@ fun PerfilScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.Top
         ) {
+
+            // Cabeçalho
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -114,10 +130,12 @@ fun PerfilScreen(
                     IconButton(
                         onClick = {
                             editandoPerfil = false
+                            erroPerfil = null
                             focusManager.clearFocus()
 
                             scope.launch {
-                                val usuario = authRepository.obterUsuarioLogado()
+                                val usuario =
+                                    authRepository.obterUsuarioLogado()
 
                                 if (usuario != null) {
                                     nome = usuario.nome
@@ -127,7 +145,7 @@ fun PerfilScreen(
                         }
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Cancelar edição",
                             tint = MytosPurple
                         )
@@ -144,6 +162,7 @@ fun PerfilScreen(
 
             Spacer(Modifier.height(20.dp))
 
+            // Dados pessoais
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -151,15 +170,19 @@ fun PerfilScreen(
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Column(Modifier.padding(20.dp)) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
                     if (carregando) {
                         Text(
                             text = "Carregando perfil...",
                             color = MytosText
                         )
                     } else if (usuarioId == null) {
+
                         Text(
-                            text = erroPerfil ?: "Nenhum usuário conectado.",
+                            text = erroPerfil
+                                ?: "Nenhum usuário conectado.",
                             color = MytosPurpleDark
                         )
 
@@ -170,16 +193,23 @@ fun PerfilScreen(
                                 authRepository.sair()
 
                                 navController.navigate(Rotas.Login) {
-                                    popUpTo(0) { inclusive = true }
+                                    popUpTo(0) {
+                                        inclusive = true
+                                    }
                                     launchSingleTop = true
                                 }
-                            }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MytosPurple
+                            )
                         ) {
                             Text("Ir para o login")
                         }
+
                     } else if (!editandoPerfil) {
+
                         Text(
-                            text = "Olá, $nome! 👋",
+                            text = "Olá, $nome!",
                             color = MytosPurpleDark,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold
@@ -198,6 +228,7 @@ fun PerfilScreen(
                         Button(
                             onClick = {
                                 editandoPerfil = true
+                                erroPerfil = null
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MytosPurple
@@ -205,7 +236,7 @@ fun PerfilScreen(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
-                                Icons.Default.Edit,
+                                imageVector = Icons.Default.Edit,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -214,7 +245,9 @@ fun PerfilScreen(
 
                             Text("Editar perfil")
                         }
+
                     } else {
+
                         Text(
                             text = "Alterar dados pessoais",
                             color = MytosPurpleDark,
@@ -253,11 +286,11 @@ fun PerfilScreen(
                             colors = campoPerfil()
                         )
 
-                        erroPerfil?.let {
+                        erroPerfil?.let { mensagem ->
                             Spacer(Modifier.height(8.dp))
 
                             Text(
-                                text = it,
+                                text = mensagem,
                                 color = MytosPurpleDark,
                                 fontSize = 13.sp
                             )
@@ -282,6 +315,7 @@ fun PerfilScreen(
                                 ) {
                                     erroPerfil = "Digite um e-mail válido."
                                 } else if (idAtual != null) {
+
                                     salvando = true
 
                                     scope.launch {
@@ -299,12 +333,17 @@ fun PerfilScreen(
                                                 authRepository.atualizarPerfil(
                                                     usuario.copy(
                                                         nome = nome.trim(),
-                                                        email = email.trim().lowercase()
+                                                        email = email
+                                                            .trim()
+                                                            .lowercase()
                                                     )
                                                 )
 
                                                 nome = nome.trim()
-                                                email = email.trim().lowercase()
+                                                email = email
+                                                    .trim()
+                                                    .lowercase()
+
                                                 erroPerfil = null
                                                 editandoPerfil = false
                                                 focusManager.clearFocus()
@@ -312,7 +351,7 @@ fun PerfilScreen(
                                         } catch (e: IllegalArgumentException) {
                                             erroPerfil = e.message
                                                 ?: "Verifique os dados informados."
-                                        } catch (_: Exception) {
+                                        } catch (e: Exception) {
                                             erroPerfil =
                                                 "Não foi possível salvar as alterações."
                                         } finally {
@@ -328,7 +367,7 @@ fun PerfilScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
-                                Icons.Default.Save,
+                                imageVector = Icons.Default.Save,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -336,7 +375,7 @@ fun PerfilScreen(
                             Spacer(Modifier.width(8.dp))
 
                             Text(
-                                if (salvando) {
+                                text = if (salvando) {
                                     "Salvando..."
                                 } else {
                                     "Salvar alterações"
@@ -347,6 +386,101 @@ fun PerfilScreen(
                 }
             }
 
+            // Acessibilidade
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = "Acessibilidade",
+                color = MytosText,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MytosPurple.copy(alpha = 0.10f)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Leitura de tela do MYTOS",
+                                color = MytosPurpleDark,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Text(
+                                text = "Ative ou desative a preferência de leitura do aplicativo.",
+                                color = MytosText,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        Switch(
+                            checked = AcessibilidadeConfig.leitorAtivo,
+                            onCheckedChange = { ativo ->
+                                AcessibilidadeConfig.definir(
+                                    context = context,
+                                    ativo = ativo
+                                )
+                            }
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Text(
+                        text = if (
+                            AcessibilidadeConfig.talkBackDoSistemaAtivo(
+                                context
+                            )
+                        ) {
+                            "O TalkBack do Android está ativo. Para desligá-lo, abra as configurações do aparelho."
+                        } else {
+                            "O TalkBack do Android pode ser gerenciado nas configurações do aparelho."
+                        },
+                        color = MytosText,
+                        fontSize = 13.sp
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_ACCESSIBILITY_SETTINGS
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Configurações de acessibilidade",
+                            color = MytosPurple
+                        )
+                    }
+                }
+            }
+
+            // Atividades
             Spacer(Modifier.height(24.dp))
 
             Text(
@@ -368,7 +502,7 @@ fun PerfilScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ListAlt,
+                    imageVector = Icons.AutoMirrored.Filled.ListAlt,
                     contentDescription = null,
                     tint = MytosPurple
                 )
@@ -384,12 +518,15 @@ fun PerfilScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            // Sair da conta
             Button(
                 onClick = {
                     authRepository.sair()
 
                     navController.navigate(Rotas.Login) {
-                        popUpTo(0) { inclusive = true }
+                        popUpTo(0) {
+                            inclusive = true
+                        }
                         launchSingleTop = true
                     }
                 },
@@ -402,7 +539,7 @@ fun PerfilScreen(
                 )
             ) {
                 Icon(
-                    Icons.Default.Logout,
+                    imageVector = Icons.Default.Logout,
                     contentDescription = null
                 )
 

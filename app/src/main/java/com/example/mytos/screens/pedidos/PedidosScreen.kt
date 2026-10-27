@@ -32,13 +32,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -46,11 +50,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.mytos.Rotas
+import com.example.mytos.data.MytosDatabase
+import com.example.mytos.data.PedidoRepository
 import com.example.mytos.data.SacolaData
 import com.example.mytos.data.produtos
+import com.example.mytos.data.toProdutoEntity
 import com.example.mytos.model.ItemSacola
 import com.example.mytos.model.Pedido
 import com.example.mytos.ui.components.MytosBottomBar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.UUID
@@ -59,16 +71,67 @@ private val MytosPurple = Color(0xFF744B8F)
 private val MytosPurpleDark = Color(0xFF432A55)
 private val MytosCream = Color(0xFFFFF9F2)
 private val MytosText = Color(0xFF302736)
-private val MytosYellow = Color(0xFFF4C95D)
 
 @Composable
 fun PedidosScreen(navController: NavController) {
+    val context = LocalContext.current
+    val database = remember(context) {
+        MytosDatabase.getDatabase(context)
+    }
+    val repository = remember(database) {
+        PedidoRepository(
+            pedidoDao = database.pedidoDao(),
+            produtoDao = database.produtoDao()
+        )
+    }
 
-    var mostrarDialogoAdicionar by remember { mutableStateOf(false) }
-    var mostrarDialogoEditar by remember { mutableStateOf(false) }
-    var pedidoSelecionado by remember { mutableStateOf<Pedido?>(null) }
+    val usuarioId = SacolaData.obterUsuarioAtualId()
+    val scope = rememberCoroutineScope()
 
-    val pedidos = SacolaData.pedidos
+    var mostrarDialogoAdicionar by remember {
+        mutableStateOf(false)
+    }
+    var mostrarDialogoEditar by remember {
+        mutableStateOf(false)
+    }
+    var pedidoSelecionado by remember {
+        mutableStateOf<Pedido?>(null)
+    }
+    var erroOperacao by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    val pedidosFlow = remember(repository, usuarioId) {
+        if (usuarioId != null) {
+            repository.observarPedidos(usuarioId)
+        } else {
+            flowOf(emptyList())
+        }
+    }
+
+    val pedidos by pedidosFlow.collectAsState(
+        initial = emptyList()
+    )
+
+    // Cadastra os produtos iniciais no Room somente
+    // quando a tabela de produtos ainda estiver vazia.
+    LaunchedEffect(database) {
+        try {
+            withContext(Dispatchers.IO) {
+                val produtoDao = database.produtoDao()
+
+                if (produtoDao.contarProdutos() == 0) {
+                    produtoDao.inserirTodos(
+                        produtos.map { it.toProdutoEntity() }
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            erroOperacao =
+                "Não foi possível preparar os produtos: " +
+                        (e.localizedMessage ?: "erro desconhecido")
+        }
+    }
 
     Scaffold(
         containerColor = MytosCream,
@@ -76,14 +139,12 @@ fun PedidosScreen(navController: NavController) {
             MytosBottomBar(navController = navController)
         }
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 20.dp)
         ) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -91,12 +152,11 @@ fun PedidosScreen(navController: NavController) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = {
-                        navController.popBackStack()
-                    }
+                    onClick = { navController.popBackStack() }
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector =
+                            Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Voltar",
                         tint = MytosPurple
                     )
@@ -114,7 +174,12 @@ fun PedidosScreen(navController: NavController) {
 
             Button(
                 onClick = {
-                    mostrarDialogoAdicionar = true
+                    if (usuarioId == null) {
+                        erroOperacao =
+                            "Não foi possível identificar o usuário logado."
+                    } else {
+                        mostrarDialogoAdicionar = true
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
@@ -137,8 +202,18 @@ fun PedidosScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (pedidos.isEmpty()) {
-
+            if (usuarioId == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Entre na sua conta para ver os pedidos.",
+                        color = MytosText.copy(alpha = 0.65f),
+                        fontSize = 16.sp
+                    )
+                }
+            } else if (pedidos.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -149,19 +224,15 @@ fun PedidosScreen(navController: NavController) {
                         fontSize = 16.sp
                     )
                 }
-
             } else {
-
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-
                     items(
                         items = pedidos,
                         key = { it.id }
                     ) { pedido ->
-
                         val quantidadeItens =
                             pedido.itens.sumOf { it.quantidade }
 
@@ -177,7 +248,7 @@ fun PedidosScreen(navController: NavController) {
                                 .fillMaxWidth()
                                 .clickable {
                                     navController.navigate(
-                                        "pedido/${pedido.id}"
+                                        "${Rotas.PedidoDetalhes}/${pedido.id}"
                                     )
                                 },
                             shape = RoundedCornerShape(16.dp),
@@ -185,21 +256,19 @@ fun PedidosScreen(navController: NavController) {
                                 containerColor = Color.White
                             )
                         ) {
-
                             Column(
                                 modifier = Modifier.padding(18.dp)
                             ) {
-
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
                                 ) {
-
                                     Column(
                                         modifier = Modifier.weight(1f)
                                     ) {
-
                                         Text(
                                             text = "Pedido #${pedido.id}",
                                             color = MytosPurpleDark,
@@ -213,14 +282,17 @@ fun PedidosScreen(navController: NavController) {
 
                                         Text(
                                             text = dataFormatada,
-                                            color = MytosText.copy(alpha = 0.65f),
+                                            color = MytosText.copy(
+                                                alpha = 0.65f
+                                            ),
                                             fontSize = 13.sp
                                         )
                                     }
 
                                     Text(
-                                        text = "R$ %.2f".format(
+                                        text = "R$ " + String.format(
                                             Locale("pt", "BR"),
+                                            "%.2f",
                                             pedido.valorTotal
                                         ),
                                         color = MytosPurple,
@@ -235,10 +307,11 @@ fun PedidosScreen(navController: NavController) {
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    verticalAlignment =
+                                        Alignment.CenterVertically,
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween
                                 ) {
-
                                     Text(
                                         text = "$quantidadeItens item(ns)",
                                         color = MytosText,
@@ -246,7 +319,6 @@ fun PedidosScreen(navController: NavController) {
                                     )
 
                                     Row {
-
                                         IconButton(
                                             onClick = {
                                                 pedidoSelecionado = pedido
@@ -254,20 +326,39 @@ fun PedidosScreen(navController: NavController) {
                                             }
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = "Editar pedido",
+                                                imageVector =
+                                                    Icons.Default.Edit,
+                                                contentDescription =
+                                                    "Editar pedido",
                                                 tint = MytosPurple
                                             )
                                         }
 
                                         IconButton(
                                             onClick = {
-                                                pedidos.remove(pedido)
+                                                val idUsuario = usuarioId
+                                                if (idUsuario != null) {
+                                                    scope.launch {
+                                                        try {
+                                                            repository.excluirPedido(
+                                                                usuarioId = idUsuario,
+                                                                pedidoId = pedido.id
+                                                            )
+                                                        } catch (e: Exception) {
+                                                            erroOperacao =
+                                                                "Não foi possível excluir o pedido: " +
+                                                                        (e.localizedMessage
+                                                                            ?: "erro desconhecido")
+                                                        }
+                                                    }
+                                                }
                                             }
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Excluir pedido",
+                                                imageVector =
+                                                    Icons.Default.Delete,
+                                                contentDescription =
+                                                    "Excluir pedido",
                                                 tint = Color(0xFFD94C59)
                                             )
                                         }
@@ -282,7 +373,6 @@ fun PedidosScreen(navController: NavController) {
     }
 
     if (mostrarDialogoAdicionar) {
-
         PedidoFormDialog(
             titulo = "Novo pedido",
             textoBotao = "Adicionar pedido",
@@ -290,6 +380,7 @@ fun PedidosScreen(navController: NavController) {
                 mostrarDialogoAdicionar = false
             },
             onSalvar = { nomeProduto, quantidade ->
+                val idUsuario = usuarioId
 
                 val produtoEncontrado = produtos.find {
                     it.nome.equals(
@@ -298,25 +389,35 @@ fun PedidosScreen(navController: NavController) {
                     )
                 }
 
-                if (produtoEncontrado == null) {
+                if (idUsuario == null || produtoEncontrado == null) {
                     false
                 } else {
-
-                    val novoItem = ItemSacola(
+                    val item = ItemSacola(
                         produto = produtoEncontrado,
                         quantidade = quantidade
                     )
 
                     val novoPedido = Pedido(
-                        id = UUID.randomUUID()
-                            .toString()
-                            .take(8)
-                            .uppercase(),
-                        itens = listOf(novoItem),
-                        valorTotal = novoItem.subtotal
+                        id = UUID.randomUUID().toString(),
+                        itens = listOf(item),
+                        valorTotal = item.subtotal
                     )
 
-                    pedidos.add(novoPedido)
+                    scope.launch {
+                        try {
+                            repository.salvarPedido(
+                                usuarioId = idUsuario,
+                                pedido = novoPedido
+                            )
+                            mostrarDialogoAdicionar = false
+                        } catch (e: Exception) {
+                            erroOperacao =
+                                "Não foi possível salvar o pedido: " +
+                                        (e.localizedMessage
+                                            ?: "erro desconhecido")
+                        }
+                    }
+
                     true
                 }
             }
@@ -324,7 +425,6 @@ fun PedidosScreen(navController: NavController) {
     }
 
     if (mostrarDialogoEditar && pedidoSelecionado != null) {
-
         PedidoFormDialog(
             titulo = "Editar pedido",
             textoBotao = "Salvar alterações",
@@ -334,9 +434,8 @@ fun PedidosScreen(navController: NavController) {
                 pedidoSelecionado = null
             },
             onSalvar = { nomeProduto, quantidade ->
-
+                val idUsuario = usuarioId
                 val pedidoAtual = pedidoSelecionado
-                    ?: return@PedidoFormDialog false
 
                 val produtoEncontrado = produtos.find {
                     it.nome.equals(
@@ -345,10 +444,13 @@ fun PedidosScreen(navController: NavController) {
                     )
                 }
 
-                if (produtoEncontrado == null) {
+                if (
+                    idUsuario == null ||
+                    pedidoAtual == null ||
+                    produtoEncontrado == null
+                ) {
                     false
                 } else {
-
                     val novoItem = ItemSacola(
                         produto = produtoEncontrado,
                         quantidade = quantidade
@@ -359,15 +461,51 @@ fun PedidosScreen(navController: NavController) {
                         valorTotal = novoItem.subtotal
                     )
 
-                    val index = pedidos.indexOfFirst {
-                        it.id == pedidoAtual.id
-                    }
-
-                    if (index != -1) {
-                        pedidos[index] = pedidoAtualizado
+                    scope.launch {
+                        try {
+                            repository.salvarPedido(
+                                usuarioId = idUsuario,
+                                pedido = pedidoAtualizado
+                            )
+                            mostrarDialogoEditar = false
+                            pedidoSelecionado = null
+                        } catch (e: Exception) {
+                            erroOperacao =
+                                "Não foi possível atualizar o pedido: " +
+                                        (e.localizedMessage
+                                            ?: "erro desconhecido")
+                        }
                     }
 
                     true
+                }
+            }
+        )
+    }
+
+    if (erroOperacao != null) {
+        AlertDialog(
+            onDismissRequest = {
+                erroOperacao = null
+            },
+            title = {
+                Text(
+                    text = "Atenção",
+                    color = MytosPurpleDark,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(erroOperacao.orEmpty())
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { erroOperacao = null }
+                ) {
+                    Text(
+                        text = "OK",
+                        color = MytosPurple
+                    )
                 }
             }
         )
@@ -382,27 +520,17 @@ private fun PedidoFormDialog(
     onDismiss: () -> Unit,
     onSalvar: (String, Int) -> Boolean
 ) {
-
     val focusManager = LocalFocusManager.current
 
-    var nomeProduto by remember {
+    var nomeProduto by remember(pedidoInicial?.id) {
         mutableStateOf(
-            pedidoInicial
-                ?.itens
-                ?.firstOrNull()
-                ?.produto
-                ?.nome
-                ?: ""
+            pedidoInicial?.itens?.firstOrNull()?.produto?.nome ?: ""
         )
     }
 
-    var quantidadeTexto by remember {
+    var quantidadeTexto by remember(pedidoInicial?.id) {
         mutableStateOf(
-            pedidoInicial
-                ?.itens
-                ?.firstOrNull()
-                ?.quantidade
-                ?.toString()
+            pedidoInicial?.itens?.firstOrNull()?.quantidade?.toString()
                 ?: ""
         )
     }
@@ -417,7 +545,6 @@ private fun PedidoFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-
         title = {
             Text(
                 text = titulo,
@@ -425,10 +552,8 @@ private fun PedidoFormDialog(
                 fontWeight = FontWeight.Bold
             )
         },
-
         text = {
             Column {
-
                 OutlinedTextField(
                     value = nomeProduto,
                     onValueChange = {
@@ -436,9 +561,7 @@ private fun PedidoFormDialog(
                         erroProduto = false
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Produto")
-                    },
+                    label = { Text("Produto") },
                     placeholder = {
                         Text("Ex.: Café de Apolo")
                     },
@@ -462,25 +585,17 @@ private fun PedidoFormDialog(
                     )
                 )
 
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedTextField(
                     value = quantidadeTexto,
                     onValueChange = {
-                        quantidadeTexto =
-                            it.filter { char -> char.isDigit() }
-
+                        quantidadeTexto = it.filter(Char::isDigit)
                         erroQuantidade = false
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = {
-                        Text("Quantidade")
-                    },
-                    placeholder = {
-                        Text("Ex.: 2")
-                    },
+                    label = { Text("Quantidade") },
+                    placeholder = { Text("Ex.: 2") },
                     singleLine = true,
                     isError = erroQuantidade,
                     supportingText = {
@@ -502,9 +617,7 @@ private fun PedidoFormDialog(
                     )
                 )
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
                     text = "Produtos disponíveis:",
@@ -520,17 +633,16 @@ private fun PedidoFormDialog(
                 )
             }
         },
-
         confirmButton = {
             Button(
                 onClick = {
-
-                    val quantidade =
-                        quantidadeTexto.toIntOrNull()
-
-                    val produtoValido =
-                        nomeProduto.trim().isNotEmpty()
-
+                    val quantidade = quantidadeTexto.toIntOrNull()
+                    val produtoValido = produtos.any {
+                        it.nome.equals(
+                            nomeProduto.trim(),
+                            ignoreCase = true
+                        )
+                    }
                     val quantidadeValida =
                         quantidade != null && quantidade > 0
 
@@ -538,17 +650,7 @@ private fun PedidoFormDialog(
                     erroQuantidade = !quantidadeValida
 
                     if (produtoValido && quantidadeValida) {
-
-                        val salvou = onSalvar(
-                            nomeProduto,
-                            quantidade!!
-                        )
-
-                        if (salvou) {
-                            onDismiss()
-                        } else {
-                            erroProduto = true
-                        }
+                        onSalvar(nomeProduto, quantidade!!)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -558,13 +660,10 @@ private fun PedidoFormDialog(
                 Text(textoBotao)
             }
         },
-
         dismissButton = {
-            TextButton(
-                onClick = onDismiss
-            ) {
+            TextButton(onClick = onDismiss) {
                 Text(
-                    "Cancelar",
+                    text = "Cancelar",
                     color = MytosPurple
                 )
             }

@@ -1,4 +1,3 @@
-
 package com.example.mytos.data
 
 import android.content.Context

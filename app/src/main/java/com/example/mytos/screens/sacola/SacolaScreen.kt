@@ -1,20 +1,17 @@
 package com.example.mytos.screens.sacola
 
-import com.example.mytos.data.SacolaData
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,147 +19,181 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.mytos.model.ItemSacola
+import com.example.mytos.Rotas
+import com.example.mytos.data.MytosDatabase
+import com.example.mytos.data.PedidoRepository
+import com.example.mytos.data.SacolaData
+import com.example.mytos.model.Pedido
 import com.example.mytos.ui.components.MytosBottomBar
-import com.example.mytos.ui.theme.MytosTheme
+import com.example.mytos.ui.components.SacolaItemCard
+import com.example.mytos.ui.theme.MytosCream
+import com.example.mytos.ui.theme.MytosPurple
+import com.example.mytos.ui.theme.MytosPurpleDark
+import com.example.mytos.ui.theme.MytosText
+import com.example.mytos.ui.theme.MytosTextSecondary
+import com.example.mytos.ui.theme.MytosYellow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
-// Paleta do Splash
-private val PurpleTop = Color(0xFF3A1A63)
-private val PurpleMid = Color(0xFF2A1248)
-private val PurpleBottom = Color(0xFF1B0B33)
+private const val TAG_SACOLA = "SacolaScreen"
 
-private val Cream = Color(0xFFFBF3E4)
-private val ProgressPurple = Color(0xFF9B6DDB)
-
-// Locale correto para formato de moeda brasileira
-private val localePtBR = Locale.forLanguageTag("pt-BR")
+// Mesmas cores de fundo da SplashScreen
+private val FundoTopo = Color(0xFF3A1A63)
+private val FundoMeio = Color(0xFF2A1248)
+private val FundoBase = Color(0xFF1B0B33)
+private val TextoClaro = Color(0xFFFBF3E4)
 
 @Composable
 fun SacolaScreen(
     navController: NavController,
-    onNavegarParaMeusPedidos: () -> Unit
+    onPedidoFinalizado: (String) -> Unit
 ) {
-    val itens = SacolaData.itensSacola
-    val valorTotal = SacolaData.calcularTotal()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            MytosBottomBar(
-                navController = navController
+    val repository = remember(context) {
+        val db = MytosDatabase.getDatabase(context.applicationContext)
+        PedidoRepository(
+            pedidoDao = db.pedidoDao(),
+            produtoDao = db.produtoDao()
+        )
+    }
+
+    val itens = SacolaData.itensSacola
+
+    var salvando by remember { mutableStateOf(false) }
+    var erro by remember { mutableStateOf<String?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(FundoTopo, FundoMeio, FundoBase)
+                )
+            )
+    ) {
+
+        // Montanhas decorativas (sem animação)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            val montanhaTras = Path().apply {
+                moveTo(0f, h)
+                lineTo(0f, h * 0.72f)
+                lineTo(w * 0.18f, h * 0.58f)
+                lineTo(w * 0.35f, h * 0.72f)
+                lineTo(w * 0.52f, h * 0.55f)
+                lineTo(w * 0.70f, h * 0.70f)
+                lineTo(w * 0.86f, h * 0.58f)
+                lineTo(w, h * 0.68f)
+                lineTo(w, h)
+                close()
+            }
+            drawPath(
+                path = montanhaTras,
+                color = Color.White.copy(alpha = 0.05f)
+            )
+
+            val montanhaFrente = Path().apply {
+                moveTo(0f, h)
+                lineTo(0f, h * 0.84f)
+                lineTo(w * 0.22f, h * 0.72f)
+                lineTo(w * 0.42f, h * 0.84f)
+                lineTo(w * 0.62f, h * 0.70f)
+                lineTo(w * 0.80f, h * 0.82f)
+                lineTo(w, h * 0.74f)
+                lineTo(w, h)
+                close()
+            }
+            drawPath(
+                path = montanhaFrente,
+                color = Color.White.copy(alpha = 0.07f)
             )
         }
-    ) { paddingValues ->
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            PurpleTop,
-                            PurpleMid,
-                            PurpleBottom
-                        )
-                    )
-                )
-        ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            bottomBar = { MytosBottomBar(navController = navController) }
+        ) { paddingValues ->
 
-            // Montanhas decorativas ao fundo
-            Canvas(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                val w = size.width
-                val h = size.height
-
-                // Montanhas do fundo
-                val back = Path().apply {
-                    moveTo(0f, h)
-                    lineTo(0f, h * 0.78f)
-                    lineTo(w * 0.22f, h * 0.68f)
-                    lineTo(w * 0.40f, h * 0.76f)
-                    lineTo(w * 0.62f, h * 0.64f)
-                    lineTo(w * 0.82f, h * 0.74f)
-                    lineTo(w, h * 0.66f)
-                    lineTo(w, h)
-                    close()
-                }
-
-                drawPath(
-                    path = back,
-                    color = Color.White.copy(alpha = 0.05f)
-                )
-
-                // Montanhas da frente
-                val front = Path().apply {
-                    moveTo(0f, h)
-                    lineTo(0f, h * 0.86f)
-                    lineTo(w * 0.30f, h * 0.78f)
-                    lineTo(w * 0.55f, h * 0.87f)
-                    lineTo(w * 0.78f, h * 0.80f)
-                    lineTo(w, h * 0.88f)
-                    lineTo(w, h)
-                    close()
-                }
-
-                drawPath(
-                    path = front,
-                    color = Color.White.copy(alpha = 0.07f)
-                )
-            }
-
-            // Conteúdo da Tela da Sacola
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .padding(
-                        horizontal = 24.dp,
-                        vertical = 16.dp
-                    )
+                    .padding(paddingValues)
+                    .padding(horizontal = 20.dp)
             ) {
 
                 Text(
-                    text = "Minha Sacola",
-                    color = Cream,
-                    fontSize = 24.sp,
+                    text = "Minha sacola",
+                    color = TextoClaro,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(top = 20.dp, bottom = 12.dp)
                 )
 
                 if (itens.isEmpty()) {
 
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "Sua sacola está vazia.",
-                            color = Cream.copy(alpha = 0.7f),
-                            fontSize = 16.sp
+                            text = "Sua sacola está vazia",
+                            color = TextoClaro,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
                         )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = "Adicione produtos pelo cardápio.",
+                            color = TextoClaro.copy(alpha = 0.8f),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Button(
+                            onClick = {
+                                navController.navigate(Rotas.Cardapio) {
+                                    launchSingleTop = true
+                                }
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MytosYellow,
+                                contentColor = MytosPurpleDark
+                            )
+                        ) {
+                            Text("Ver cardápio")
+                        }
                     }
 
                 } else {
@@ -171,220 +202,150 @@ fun SacolaScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-
                         items(
-                            itens,
+                            items = itens,
                             key = { it.produto.id }
                         ) { item ->
-
-                            SacolaItemCard(
-                                itemSacola = item,
-                                onAumentar = {
-                                    SacolaData.aumentarQuantidade(
-                                        item.produto.id
-                                    )
-                                },
-                                onDiminuir = {
-                                    SacolaData.diminuirQuantidade(
-                                        item.produto.id
-                                    )
-                                }
-                            )
+                            Box(
+                                modifier = Modifier.background(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                            ) {
+                                SacolaItemCard(
+                                    itemSacola = item,
+                                    onAumentar = {
+                                        SacolaData.aumentarQuantidade(item.produto.id)
+                                    },
+                                    onDiminuir = {
+                                        SacolaData.diminuirQuantidade(item.produto.id)
+                                    }
+                                )
+                            }
                         }
                     }
 
-                    Spacer(
-                        modifier = Modifier.height(16.dp)
-                    )
+                    Spacer(Modifier.height(12.dp))
 
-                    // Card de Resumo do Pedido
                     Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = PurpleMid.copy(alpha = 0.9f)
+                            containerColor = Color.White
                         ),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 3.dp
+                        )
                     ) {
-
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
+                        Column(modifier = Modifier.padding(18.dp)) {
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-
                                 Text(
-                                    text = "Valor Total",
-                                    color = Cream,
+                                    text = "Total",
+                                    color = MytosText,
                                     fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.SemiBold
                                 )
 
                                 Text(
-                                    text = String.format(
-                                        localePtBR,
-                                        "R$ %.2f",
-                                        valorTotal
+                                    text = formatarMoeda(
+                                        SacolaData.calcularTotal()
                                     ),
-                                    color = Cream,
-                                    fontSize = 18.sp,
+                                    color = MytosPurple,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            Spacer(
-                                modifier = Modifier.height(16.dp)
-                            )
+                            if (erro != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = erro.orEmpty(),
+                                    color = Color(0xFFD94C59),
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            Spacer(Modifier.height(14.dp))
 
                             Button(
                                 onClick = {
-                                    val pedidoCriado =
-                                        SacolaData.finalizarPedido()
+                                    val usuarioId = SacolaData.obterUsuarioAtualId()
+                                    val itensAtuais = itens.toList()
 
-                                    if (pedidoCriado != null) {
-                                        onNavegarParaMeusPedidos()
+                                    if (usuarioId == null || itensAtuais.isEmpty()) {
+                                        erro = "Não foi possível identificar o usuário ou a sacola está vazia."
+                                    } else if (!salvando) {
+                                        salvando = true
+                                        erro = null
+
+                                        // Id vazio: o repositório cria um pedido novo
+                                        val pedido = Pedido(
+                                            id = "",
+                                            itens = itensAtuais,
+                                            valorTotal = SacolaData.calcularTotal()
+                                        )
+
+                                        scope.launch {
+                                            try {
+                                                // Grava o pedido no Room (Dispatchers.IO)
+                                                val novoId = withContext(Dispatchers.IO) {
+                                                    repository.salvarPedido(
+                                                        usuarioId = usuarioId,
+                                                        pedido = pedido
+                                                    )
+                                                }
+
+                                                // Só limpa a sacola depois de salvar com sucesso
+                                                SacolaData.limparSacolaAtual()
+                                                onPedidoFinalizado(novoId)
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                    TAG_SACOLA,
+                                                    "Erro ao salvar pedido",
+                                                    e
+                                                )
+                                                erro = "Não foi possível finalizar o pedido. Tente novamente."
+                                            } finally {
+                                                salvando = false
+                                            }
+                                        }
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = ProgressPurple
-                                ),
-                                shape = RoundedCornerShape(12.dp),
+                                enabled = !salvando,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(50.dp)
+                                    .height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MytosYellow,
+                                    contentColor = MytosPurpleDark
+                                )
                             ) {
-
                                 Text(
-                                    text = "Finalizar pedido",
-                                    color = Cream,
+                                    text = if (salvando) {
+                                        "SALVANDO..."
+                                    } else {
+                                        "FINALIZAR PEDIDO"
+                                    },
                                     fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
                                 )
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
     }
 }
 
-@Composable
-fun SacolaItemCard(
-    itemSacola: ItemSacola,
-    onAumentar: () -> Unit,
-    onDiminuir: () -> Unit
-) {
-
-    val produto = itemSacola.produto
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics {
-                contentDescription =
-                    "Item ${produto.nome}, quantidade ${itemSacola.quantidade}"
-            },
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.08f)
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-
-                Text(
-                    text = produto.nome,
-                    color = Cream,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = String.format(
-                        localePtBR,
-                        "Preço: R$ %.2f",
-                        produto.preco
-                    ),
-                    color = Cream.copy(alpha = 0.7f),
-                    fontSize = 14.sp
-                )
-
-                Text(
-                    text = String.format(
-                        localePtBR,
-                        "Subtotal: R$ %.2f",
-                        itemSacola.subtotal
-                    ),
-                    color = ProgressPurple,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            // Controles de quantidade
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-
-                IconButton(
-                    onClick = onDiminuir,
-                    modifier = Modifier.size(36.dp)
-                ) {
-
-                    Text(
-                        text = "−",
-                        color = Cream,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = "${itemSacola.quantidade}",
-                    color = Cream,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-
-                IconButton(
-                    onClick = onAumentar,
-                    modifier = Modifier.size(36.dp)
-                ) {
-
-                    Text(
-                        text = "+",
-                        color = Cream,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Preview(
-    showBackground = true,
-    showSystemUi = true
-)
-@Composable
-fun SacolaScreenPreview() {
-    MytosTheme {
-        // Preview sem navegação real
-    }
-}
+private fun formatarMoeda(valor: Double): String =
+    String.format(Locale("pt", "BR"), "R$ %.2f", valor)
